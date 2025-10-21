@@ -22,10 +22,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      (async () => {
-        setUser(session?.user ?? null);
-      })();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email);
+      setUser(session?.user ?? null);
+      setLoading(false);
+
+      // Clear local storage on sign out to prevent stale tokens
+      if (event === 'SIGNED_OUT') {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -47,13 +53,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    console.log('Attempting sign in for:', email);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    if (error) {
+      console.error('Sign in error:', error);
+      throw error;
+    }
+    console.log('Sign in successful');
   };
 
   const signOut = async () => {
+    console.log('Signing out...');
     const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    if (error) {
+      console.error('Sign out error:', error);
+      throw error;
+    }
+    console.log('Sign out successful');
     // Clear any stored professional auth when admin logs out
     localStorage.removeItem('professional_auth');
   };

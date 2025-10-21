@@ -21,23 +21,15 @@ WORKDIR /app
 COPY package*.json ./
 COPY server/package*.json ./server/
 
-# Instalar dependências completas para build
-RUN npm ci
+# Instalar dependências
+RUN npm ci && cd server && npm ci
 
 # Copiar código fonte
 COPY . .
 
-# Instalar dependências do server separadamente
-RUN cd server && npm ci
-
-# Build do backend primeiro (mais rápido)
+# Build do backend e frontend
 RUN cd server && npm run build
-
-# Build do frontend com otimizações
 RUN npm run build
-
-# Limpar cache npm para reduzir tamanho da imagem
-RUN npm cache clean --force && rm -rf /tmp/*
 
 # Limpar cache npm para reduzir tamanho da imagem
 RUN npm cache clean --force && rm -rf /tmp/*
