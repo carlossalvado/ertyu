@@ -22,15 +22,15 @@ export default function Navbar({ currentView, onViewChange }: NavbarProps) {
 
           <div className="hidden md:flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
             <button
-              onClick={() => onViewChange('chat')}
+              onClick={() => onViewChange('whatsapp')}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
-                currentView === 'chat'
+                currentView === 'whatsapp'
                   ? 'bg-white text-green-600 shadow-sm'
                   : 'text-gray-600 hover:text-gray-800'
               }`}
             >
               <MessageCircle className="w-5 h-5" />
-              <span className="font-medium">Chat</span>
+              <span className="font-medium">WhatsApp</span>
             </button>
             <button
               onClick={() => onViewChange('dashboard')}
@@ -44,6 +44,17 @@ export default function Navbar({ currentView, onViewChange }: NavbarProps) {
               <span className="font-medium">Dashboard</span>
             </button>
             <button
+              onClick={() => onViewChange('chat')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
+                currentView === 'chat'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              <MessageCircle className="w-5 h-5" />
+              <span className="font-medium">Chat</span>
+            </button>
+            <button
               onClick={() => onViewChange('settings')}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
                 currentView === 'settings'
@@ -53,17 +64,6 @@ export default function Navbar({ currentView, onViewChange }: NavbarProps) {
             >
               <Settings className="w-5 h-5" />
               <span className="font-medium">Configurações</span>
-            </button>
-            <button
-              onClick={() => onViewChange('whatsapp')}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
-                currentView === 'whatsapp'
-                  ? 'bg-white text-green-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              <Users className="w-5 h-5" />
-              <span className="font-medium">WhatsApp</span>
             </button>
             <button
               onClick={() => onViewChange('appointments')}
@@ -106,15 +106,15 @@ export default function Navbar({ currentView, onViewChange }: NavbarProps) {
 
       <div className="md:hidden mt-4 flex space-x-2">
         <button
-          onClick={() => onViewChange('chat')}
+          onClick={() => onViewChange('whatsapp')}
           className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-lg transition ${
-            currentView === 'chat'
+            currentView === 'whatsapp'
               ? 'bg-green-600 text-white'
               : 'bg-gray-100 text-gray-600'
           }`}
         >
           <MessageCircle className="w-5 h-5" />
-          <span className="font-medium">Chat</span>
+          <span className="font-medium">WhatsApp</span>
         </button>
         <button
           onClick={() => onViewChange('dashboard')}
@@ -126,6 +126,17 @@ export default function Navbar({ currentView, onViewChange }: NavbarProps) {
         >
           <BarChart3 className="w-5 h-5" />
           <span className="font-medium">Dashboard</span>
+        </button>
+        <button
+          onClick={() => onViewChange('chat')}
+          className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-lg transition ${
+            currentView === 'chat'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600'
+          }`}
+        >
+          <MessageCircle className="w-5 h-5" />
+          <span className="font-medium">Chat</span>
         </button>
         <button
           onClick={() => onViewChange('settings')}

@@ -10,6 +10,7 @@ export default function WhatsAppAgentConfig() {
   const [isConnected, setIsConnected] = useState(false);
   const [agentEnabled, setAgentEnabled] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [whatsappNumber, setWhatsappNumber] = useState('');
 
   // Configurações avançadas do agente IA
   const [welcomeMessage, setWelcomeMessage] = useState('Olá! Sou o assistente virtual. Como posso ajudar você hoje? Posso agendar um horário, informar sobre serviços ou tirar dúvidas.');
@@ -22,7 +23,25 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
   const [priceInquiry, setPriceInquiry] = useState(true);
 
   useEffect(() => {
-    loadConfiguration();
+    if (user) {
+      loadConfiguration();
+    }
+  }, [user]);
+
+  // Carregar número do WhatsApp do usuário
+  useEffect(() => {
+    if (user) {
+      supabase
+        .from('users')
+        .select('whatsapp_number')
+        .eq('id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.whatsapp_number) {
+            setWhatsappNumber(data.whatsapp_number);
+          }
+        });
+    }
   }, [user]);
 
   const loadConfiguration = async () => {
@@ -30,31 +49,47 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
 
     try {
       // Carregar status de conexão
-      const { data: userData } = await supabase
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('whatsapp_connected')
         .eq('id', user.id)
         .maybeSingle();
 
-      if (userData) {
+      if (userError) {
+        console.error('Erro ao carregar dados do usuário:', userError);
+        setIsConnected(false);
+      } else if (userData) {
         setIsConnected(userData.whatsapp_connected || false);
       }
 
       // Verificar configurações do agente IA
-      const { data: agentConfig } = await supabase
+      const { data: agentConfig, error: agentError } = await supabase
         .from('whatsapp_agent_config')
         .select('agent_enabled, welcome_message, default_response, gemini_prompt')
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (agentConfig) {
+      if (agentError) {
+        if (agentError.code === 'PGRST116') {
+          // Registro não encontrado - primeiro acesso
+          console.log('Primeiro acesso do usuário - usando valores padrão');
+          setAgentEnabled(false);
+        } else {
+          console.error('Erro ao carregar configurações do agente:', agentError);
+          // Em caso de erro, assume valores padrão
+          setAgentEnabled(false);
+        }
+      } else if (agentConfig) {
         setAgentEnabled(agentConfig.agent_enabled || false);
         setWelcomeMessage(agentConfig.welcome_message || welcomeMessage);
         setDefaultResponse(agentConfig.default_response || defaultResponse);
         setGeminiPrompt(agentConfig.gemini_prompt || geminiPrompt);
+      } else {
+        // Primeiro acesso - valores padrão
+        setAgentEnabled(false);
       }
     } catch (error) {
-      console.error('Erro ao carregar configuração:', error);
+      console.error('Erro geral ao carregar configuração:', error);
       // Em caso de erro, assume valores padrão
       setIsConnected(false);
       setAgentEnabled(false);
@@ -69,11 +104,16 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
     setMessage('Iniciando sessão WhatsApp...');
 
     try {
+      const session = await supabase.auth.getSession();
+      if (!session.data.session?.access_token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+
       const res = await fetch('/api/whatsapp/start-session', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+          'Authorization': `Bearer ${session.data.session.access_token}`
         }
       });
 
@@ -92,9 +132,17 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
   const pollForQRCode = async () => {
     const pollInterval = setInterval(async () => {
       try {
+        const session = await supabase.auth.getSession();
+        if (!session.data.session?.access_token) {
+          setStartingSession(false);
+          setMessage('Sessão expirada. Faça login novamente.');
+          clearInterval(pollInterval);
+          return;
+        }
+
         const res = await fetch('/api/whatsapp/qr', {
           headers: {
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+            'Authorization': `Bearer ${session.data.session.access_token}`
           }
         });
 
@@ -134,29 +182,50 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
 
     try {
       // Primeiro, verificar se já existe um registro
-      const { data: existing } = await supabase
+      const { data: existing, error: checkError } = await supabase
         .from('whatsapp_agent_config')
         .select('id')
         .eq('user_id', user.id)
         .maybeSingle();
 
+      if (checkError) {
+        console.error('Erro ao verificar registro existente:', checkError);
+        setAgentEnabled(!newState); // Reverte estado
+        setMessage('Erro ao atualizar status do agente');
+        return;
+      }
+
       if (existing) {
         // Update
-        await supabase
+        const { error: updateError } = await supabase
           .from('whatsapp_agent_config')
           .update({
             agent_enabled: newState,
             updated_at: new Date().toISOString()
           })
           .eq('user_id', user.id);
+
+        if (updateError) {
+          console.error('Erro ao atualizar agente:', updateError);
+          setAgentEnabled(!newState); // Reverte estado
+          setMessage('Erro ao atualizar status do agente');
+          return;
+        }
       } else {
         // Insert
-        await supabase
+        const { error: insertError } = await supabase
           .from('whatsapp_agent_config')
           .insert({
             user_id: user.id,
             agent_enabled: newState
           });
+
+        if (insertError) {
+          console.error('Erro ao criar registro do agente:', insertError);
+          setAgentEnabled(!newState); // Reverte estado
+          setMessage('Erro ao atualizar status do agente');
+          return;
+        }
       }
 
       setMessage(`Agente IA ${newState ? 'ativado' : 'desativado'} com sucesso!`);
@@ -170,21 +239,48 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
   const checkConnection = async () => {
     if (!user) return setMessage('Usuário não autenticado');
 
+    // Primeiro salvar o número do WhatsApp se foi preenchido
+    if (whatsappNumber.trim()) {
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ whatsapp_number: whatsappNumber.trim() })
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('Erro ao salvar número WhatsApp:', updateError);
+        setMessage('Erro ao salvar número do WhatsApp');
+        return;
+      }
+    }
+
     try {
+      const session = await supabase.auth.getSession();
+      if (!session.data.session?.access_token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+
       const res = await fetch('/api/whatsapp/qr', {
         headers: {
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+          'Authorization': `Bearer ${session.data.session.access_token}`
         }
       });
 
       const data = await res.json();
-      if (res.ok && data.connected) {
-        setIsConnected(true);
-        setQrCode(null);
-        setMessage('WhatsApp conectado com sucesso!');
-        loadConfiguration(); // Recarrega configuração
+      if (res.ok) {
+        if (data.qrCode) {
+          setQrCode(data.qrCode);
+          setIsConnected(false);
+          setMessage('QR Code gerado! Escaneie com seu WhatsApp.');
+        } else if (data.connected) {
+          setIsConnected(true);
+          setQrCode(null);
+          setMessage('WhatsApp conectado com sucesso!');
+          loadConfiguration(); // Recarrega configuração
+        } else {
+          setMessage('WhatsApp ainda não conectado. Clique novamente para gerar QR code.');
+        }
       } else {
-        setMessage('WhatsApp ainda não conectado. Verifique se escaneou o QR code no WAHA.');
+        setMessage('Erro ao verificar conexão');
       }
     } catch (err: any) {
       console.error('Erro ao verificar conexão:', err);
@@ -196,26 +292,48 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
     if (!user) return setMessage('Usuário não autenticado');
 
     try {
+      const session = await supabase.auth.getSession();
+      if (!session.data.session?.access_token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+
       const res = await fetch('/api/whatsapp/disconnect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+          'Authorization': `Bearer ${session.data.session.access_token}`
         }
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Erro ao desconectar');
 
+      // Limpar número do WhatsApp no Supabase
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          whatsapp_connected: false,
+          whatsapp_number: ''
+        })
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('Erro ao limpar dados do WhatsApp:', updateError);
+        // Continua mesmo com erro de limpeza
+      }
+
+      // Limpar estado local
       setIsConnected(false);
       setQrCode(null);
-      setMessage('WhatsApp desconectado com sucesso!');
+      setWhatsappNumber('');
+      setMessage('WhatsApp desconectado com sucesso! Número removido.');
     } catch (err: any) {
       console.error('Erro ao desconectar:', err);
-      // Mesmo com erro, desconecta localmente
+      // Mesmo com erro, desconecta localmente e limpa dados
       setIsConnected(false);
       setQrCode(null);
-      setMessage('WhatsApp desconectado localmente');
+      setWhatsappNumber('');
+      setMessage('WhatsApp desconectado localmente. Número removido.');
     }
   };
 
@@ -224,35 +342,51 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
 
     try {
       // Primeiro, verificar se já existe um registro
-      const { data: existing } = await supabase
+      const { data: existing, error: checkError } = await supabase
         .from('whatsapp_agent_config')
         .select('id')
         .eq('user_id', user.id)
         .maybeSingle();
 
+      if (checkError) {
+        console.error('Erro ao verificar registro existente:', checkError);
+        setMessage('❌ Erro ao salvar configurações do Gemini IA');
+        return;
+      }
+
+      const configData = {
+        user_id: user.id,
+        agent_enabled: agentEnabled,
+        welcome_message: welcomeMessage,
+        default_response: defaultResponse,
+        gemini_prompt: geminiPrompt,
+        updated_at: new Date().toISOString()
+      };
+
       if (existing) {
         // Update
-        await supabase
+        const { error: updateError } = await supabase
           .from('whatsapp_agent_config')
-          .update({
-            agent_enabled: agentEnabled,
-            welcome_message: welcomeMessage,
-            default_response: defaultResponse,
-            gemini_prompt: geminiPrompt,
-            updated_at: new Date().toISOString()
-          })
+          .update(configData)
           .eq('user_id', user.id);
+
+        if (updateError) {
+          console.error('Erro ao atualizar configurações:', updateError);
+          setMessage('❌ Erro ao salvar configurações do Gemini IA');
+          return;
+        }
       } else {
-        // Insert
-        await supabase
+        // Insert - remove updated_at para insert
+        const { updated_at, ...insertData } = configData;
+        const { error: insertError } = await supabase
           .from('whatsapp_agent_config')
-          .insert({
-            user_id: user.id,
-            agent_enabled: agentEnabled,
-            welcome_message: welcomeMessage,
-            default_response: defaultResponse,
-            gemini_prompt: geminiPrompt
-          });
+          .insert(insertData);
+
+        if (insertError) {
+          console.error('Erro ao criar registro de configurações:', insertError);
+          setMessage('❌ Erro ao salvar configurações do Gemini IA');
+          return;
+        }
       }
 
       setMessage('🤖 Configurações do Gemini IA salvas com sucesso!');
@@ -265,9 +399,17 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center space-x-3 mb-6">
-          <Bot className="w-8 h-8 text-green-600" />
-          <h1 className="text-3xl font-bold text-gray-800">WhatsApp AI Agent</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
+            <Bot className="w-8 h-8 text-green-600" />
+            <h1 className="text-3xl font-bold text-gray-800">WhatsApp AI Agent</h1>
+          </div>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('navigateToView', { detail: { view: 'dashboard' } }))}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition"
+          >
+            📊 Ir para Dashboard
+          </button>
         </div>
 
         <div className="space-y-6">
@@ -286,28 +428,38 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
                     Conectar WhatsApp
                   </h3>
                   <p className="text-sm text-blue-700 mb-4">
-                    Para conectar seu WhatsApp, você precisa acessar a interface do WAHA.
-                    Clique no botão abaixo para abrir a página de configuração.
+                    Configure seu número do WhatsApp e clique em "Testar Conexão" para gerar o QR code automaticamente.
                   </p>
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => window.open('http://localhost:3001', '_blank')}
-                      className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition block w-full"
-                    >
-                      🔗 Abrir WAHA (localhost:3001)
-                    </button>
-                    <p className="text-xs text-gray-600">
-                      1. Clique no botão acima para abrir o WAHA<br/>
-                      2. Na interface do WAHA, crie uma nova sessão<br/>
-                      3. Escaneie o QR code com seu WhatsApp<br/>
-                      4. Volte aqui e clique em "Verificar Conexão"
-                    </p>
-                    <button
-                      onClick={checkConnection}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition"
-                    >
-                      🔄 Verificar Conexão
-                    </button>
+                  <div className="space-y-4">
+                    <div className="text-left">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        📱 Número do WhatsApp
+                      </label>
+                      <input
+                        type="tel"
+                        value={whatsappNumber}
+                        onChange={(e) => setWhatsappNumber(e.target.value)}
+                        placeholder="Ex: +5511999999999"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Digite o número completo com DDD (ex: +5511999999999)
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <p className="text-xs text-gray-600">
+                        1. Digite seu número do WhatsApp acima<br/>
+                        2. Clique em "Testar Conexão" para gerar QR code<br/>
+                        3. Escaneie o QR code com seu WhatsApp<br/>
+                        4. Pronto! WhatsApp estará conectado
+                      </p>
+                      <button
+                        onClick={checkConnection}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition block w-full"
+                      >
+                        🔄 Testar Conexão
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : qrCode ? (
@@ -392,6 +544,8 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
                   <p className="text-sm text-blue-800">
                     🤖 <strong>Agente Gemini IA:</strong> Configure o prompt personalizado para seu assistente virtual.
                     O agente usará inteligência artificial para responder às mensagens dos clientes de forma inteligente e personalizada.
+                    <br/><br/>
+                    <strong>Configuração padrão incluída:</strong> Agendamento, informações de serviços, preços e suporte básico.
                   </p>
                 </div>
 
@@ -408,6 +562,7 @@ Se não souber algo específico, sugira que o cliente entre em contato diretamen
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Este prompt define como o agente IA se comporta e responde às mensagens dos clientes.
+                    Já vem pré-configurado com instruções para agendamento, serviços e suporte.
                   </p>
                 </div>
 

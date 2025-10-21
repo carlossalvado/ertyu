@@ -11,8 +11,9 @@ import fs from 'fs';
 import path from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// WAHA API configuration
-const WAHA_API_BASE = 'http://localhost:3001';
+// WAHA API configuration - será configurado via variável de ambiente
+const WAHA_API_BASE = process.env.WAHA_API_BASE || 'http://52.202.43.69:3001';
+const WAHA_API_KEY = process.env.WAHA_API_KEY || 'a89bfdf458424490ab7cfa263e43fa0d';
 
 dotenv.config();
 
@@ -178,18 +179,50 @@ app.post('/api/whatsapp/start-session', async (req: any, res: any) => {
 app.get('/api/whatsapp/qr', async (req: any, res: any) => {
   try {
     const userId = req.user.id;
-    const sessionName = `user_${userId}`;
+    const sessionName = 'default'; // Usar sessão padrão do WAHA
+
+    // Verificar se sessão existe, se não, criar
+    try {
+      const sessionCheck = await axios.get(`${WAHA_API_BASE}/api/sessions`, {
+        headers: { 'X-API-Key': WAHA_API_KEY }
+      });
+
+      const sessionExists = sessionCheck.data.some((s: any) => s.name === sessionName);
+
+      if (!sessionExists) {
+        // Criar sessão se não existir
+        await axios.post(`${WAHA_API_BASE}/api/sessions/start`, {
+          name: sessionName,
+          config: {
+            webhooks: [
+              {
+                url: `${process.env.BASE_URL || 'http://localhost:4000'}/webhook/whatsapp`,
+                events: ['message', 'session.status']
+              }
+            ]
+          }
+        }, {
+          headers: { 'X-API-Key': WAHA_API_KEY }
+        });
+      }
+    } catch (sessionError) {
+      console.error('Erro verificando/criando sessão:', sessionError);
+    }
 
     // Obter QR code da sessão WAHA
-    const wahaResponse = await axios.get(`${WAHA_API_BASE}/api/sessions/${sessionName}/qr`);
+    const wahaResponse = await axios.get(`${WAHA_API_BASE}/api/${sessionName}/auth/qr?format=image`, {
+      headers: { 'X-API-Key': WAHA_API_KEY },
+      responseType: 'arraybuffer'
+    });
 
     if (wahaResponse.data) {
-      // Gerar QR code como base64
-      const qrCodeDataURL = await qrcode.toDataURL(wahaResponse.data.qr);
+      // Converter para base64
+      const base64 = Buffer.from(wahaResponse.data, 'binary').toString('base64');
+      const qrCodeDataURL = `data:image/png;base64,${base64}`;
 
       res.json({
         qrCode: qrCodeDataURL,
-        connected: wahaResponse.data.status === 'WORKING'
+        connected: false // Será atualizado quando conectar
       });
     } else {
       // Fallback para dados do banco

@@ -4,10 +4,10 @@ import { ProfessionalAuthProvider, useProfessionalAuth } from './contexts/Profes
 import LoginPage from './pages/LoginPage';
 import ProfessionalDashboardPage from './pages/ProfessionalDashboardPage';
 import WhatsAppConnect from './components/WhatsApp/WhatsAppConnect';
+import WhatsAppAgentConfig from './pages/WhatsAppAgentConfig';
 import ChatPage from './pages/ChatPage';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
-import WhatsAppAgentConfig from './pages/WhatsAppAgentConfig';
 import AppointmentsPage from './pages/AppointmentsPage';
 import CustomersPage from './pages/CustomersPage';
 import ProfessionalsPage from './pages/ProfessionalsPage';
@@ -18,7 +18,7 @@ function AppContent() {
   const { user, loading: authLoading } = useAuth();
   const { professional, loading: profLoading } = useProfessionalAuth();
   const [isWhatsAppConnected, setIsWhatsAppConnected] = useState(false);
-  const [currentView, setCurrentView] = useState<'chat' | 'dashboard' | 'settings' | 'appointments' | 'customers' | 'professionals' | 'whatsapp'>('dashboard');
+  const [currentView, setCurrentView] = useState<'chat' | 'dashboard' | 'settings' | 'appointments' | 'customers' | 'professionals' | 'whatsapp'>('whatsapp');
 
   useEffect(() => {
     if (user) {
@@ -86,19 +86,19 @@ function AppContent() {
     return <LoginPage />;
   }
 
-  if (!isWhatsAppConnected) {
-    return <WhatsAppConnect onConnected={() => setIsWhatsAppConnected(true)} />;
-  }
-
+  // Sempre mostrar página do WhatsApp Agent (tela principal)
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar currentView={currentView} onViewChange={setCurrentView} />
-      {currentView === 'chat' && <ChatPage />}
-      {currentView === 'dashboard' && <DashboardPage />}
-  {currentView === 'settings' && <SettingsPage />}
-  {currentView === 'whatsapp' && <WhatsAppAgentConfig />}
-      {currentView === 'appointments' && <AppointmentsPage />}
-      {currentView === 'customers' && <CustomersPage />}
+      <div className="pt-6">
+        {currentView === 'whatsapp' && <WhatsAppAgentConfig />}
+        {currentView === 'chat' && <ChatPage />}
+        {currentView === 'dashboard' && <DashboardPage />}
+        {currentView === 'settings' && <SettingsPage />}
+        {currentView === 'appointments' && <AppointmentsPage />}
+        {currentView === 'customers' && <CustomersPage />}
+        {currentView === 'professionals' && <ProfessionalsPage />}
+      </div>
     </div>
   );
 }

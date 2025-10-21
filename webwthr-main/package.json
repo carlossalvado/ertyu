@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "server:dev": "node server/node_modules/ts-node-dev/bin.js --respawn --transpile-only server/src/index.ts",
-    "server:start": "node server/dist/index.js"
+    "server:start": "node server/dist/index.js",
+    "start:production": "concurrently \"node server/dist/index.js\" \"npx serve -s dist -l 3000\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
@@ -24,11 +25,13 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.18",
+    "concurrently": "^8.2.2",
     "eslint": "^9.9.1",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.11",
     "globals": "^15.9.0",
     "postcss": "^8.4.35",
+    "serve": "^14.2.1",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
