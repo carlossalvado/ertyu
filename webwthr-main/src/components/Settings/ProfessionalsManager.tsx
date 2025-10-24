@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Plus, Edit2, Trash2, User, Settings, Key, CheckSquare, Square, Trash } from 'lucide-react';
+import { Plus, Edit2, Trash2, User, Settings, Key, CheckSquare, Square, Trash, Percent } from 'lucide-react';
 
 interface Professional {
   id: string;
@@ -25,6 +25,7 @@ export default function ProfessionalsManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
   const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
+  const [isCommissionsModalOpen, setIsCommissionsModalOpen] = useState(false);
   const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
   const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
   const [selectedProfessionals, setSelectedProfessionals] = useState<Set<string>>(new Set());
@@ -209,10 +210,15 @@ export default function ProfessionalsManager() {
     setIsCredentialsModalOpen(true);
   };
 
+  const openCommissionsModal = (professional: Professional) => {
+    setSelectedProfessional(professional);
+    setIsCommissionsModalOpen(true);
+  };
+
   const loadProfessionalServices = async (professionalId: string) => {
     const { data, error } = await supabase
       .from('professional_services')
-      .select('service_id')
+      .select('service_id, commission')
       .eq('professional_id', professionalId);
 
     if (error) {
@@ -220,7 +226,10 @@ export default function ProfessionalsManager() {
       return [];
     }
 
-    return data?.map(item => item.service_id) || [];
+    return data?.map(item => ({
+      serviceId: item.service_id,
+      commission: item.commission || 0
+    })) || [];
   };
 
   const updateProfessionalServices = async (professionalId: string, serviceIds: string[]) => {
@@ -231,12 +240,24 @@ export default function ProfessionalsManager() {
         .delete()
         .eq('professional_id', professionalId);
 
-      // Then, add the new assignments
+      // Then, add the new assignments with default commission from service
       if (serviceIds.length > 0) {
-        const assignments = serviceIds.map(serviceId => ({
-          professional_id: professionalId,
-          service_id: serviceId
-        }));
+        // Get default commissions for these services
+        const { data: servicesData, error: servicesError } = await supabase
+          .from('services')
+          .select('id, default_commission')
+          .in('id', serviceIds);
+
+        if (servicesError) throw servicesError;
+
+        const assignments = serviceIds.map(serviceId => {
+          const service = servicesData?.find(s => s.id === serviceId);
+          return {
+            professional_id: professionalId,
+            service_id: serviceId,
+            commission: service?.default_commission || 0
+          };
+        });
 
         const { error } = await supabase
           .from('professional_services')
@@ -246,6 +267,34 @@ export default function ProfessionalsManager() {
       }
     } catch (error) {
       console.error('Error updating professional services:', error);
+      throw error;
+    }
+  };
+
+  const updateProfessionalCommissions = async (professionalId: string, serviceAssignments: { serviceId: string; commission: number }[]) => {
+    try {
+      // First, remove all existing assignments
+      await supabase
+        .from('professional_services')
+        .delete()
+        .eq('professional_id', professionalId);
+
+      // Then, add the new assignments with custom commissions
+      if (serviceAssignments.length > 0) {
+        const assignments = serviceAssignments.map(({ serviceId, commission }) => ({
+          professional_id: professionalId,
+          service_id: serviceId,
+          commission: commission
+        }));
+
+        const { error } = await supabase
+          .from('professional_services')
+          .insert(assignments);
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Error updating professional commissions:', error);
       throw error;
     }
   };
@@ -504,6 +553,13 @@ export default function ProfessionalsManager() {
                   <Settings className="w-4 h-4" />
                 </button>
                 <button
+                  onClick={() => openCommissionsModal(professional)}
+                  className="p-2 text-gray-400 hover:text-green-600 transition"
+                  title="Editar Comissões"
+                >
+                  <Percent className="w-4 h-4" />
+                </button>
+                <button
                   onClick={() => handleDelete(professional.id)}
                   className="p-2 text-gray-400 hover:text-red-600 transition"
                 >
@@ -627,6 +683,149 @@ export default function ProfessionalsManager() {
           onUpdate={updateProfessionalCredentials}
         />
       )}
+
+      {/* Commissions Modal */}
+      {isCommissionsModalOpen && selectedProfessional && (
+        <CommissionsModal
+          professional={selectedProfessional}
+          services={services}
+          onClose={() => setIsCommissionsModalOpen(false)}
+          onUpdate={updateProfessionalCommissions}
+          loadProfessionalServices={loadProfessionalServices}
+        />
+      )}
+    </div>
+  );
+}
+
+// Commissions Modal Component
+function CommissionsModal({
+  professional,
+  services,
+  onClose,
+  onUpdate,
+  loadProfessionalServices
+}: {
+  professional: Professional;
+  services: Service[];
+  onClose: () => void;
+  onUpdate: (professionalId: string, serviceAssignments: { serviceId: string; commission: number }[]) => Promise<void>;
+  loadProfessionalServices: (professionalId: string) => Promise<{ serviceId: string; commission: number }[]>;
+}) {
+  const [assignedServices, setAssignedServices] = useState<{ serviceId: string; commission: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadAssignedServices();
+  }, [professional.id]);
+
+  const loadAssignedServices = async () => {
+    try {
+      const assigned = await loadProfessionalServices(professional.id);
+      setAssignedServices(assigned);
+    } catch (error) {
+      console.error('Error loading assigned services:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCommissionChange = (serviceId: string, commission: number) => {
+    setAssignedServices(prev =>
+      prev.map(item =>
+        item.serviceId === serviceId
+          ? { ...item, commission: Math.max(0, Math.min(100, commission)) }
+          : item
+      )
+    );
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onUpdate(professional.id, assignedServices);
+      onClose();
+    } catch (error) {
+      console.error('Error saving services:', error);
+      alert('Erro ao salvar serviços. Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg p-6">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
+        <h3 className="text-lg font-semibold mb-4">
+          Comissões de {professional.name}
+        </h3>
+
+        <div className="space-y-3 mb-6">
+          {assignedServices.map(serviceAssignment => {
+            const service = services.find(s => s.id === serviceAssignment.serviceId);
+            if (!service) return null;
+
+            return (
+              <div key={service.id} className="p-3 border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-medium text-gray-900">{service.name}</div>
+                  <div className="text-sm text-gray-600">
+                    R$ {service.price.toFixed(2)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Comissão (%):
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={serviceAssignment.commission}
+                    onChange={(e) => handleCommissionChange(service.id, parseFloat(e.target.value) || 0)}
+                    className="w-20 px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+            );
+          })}
+
+          {assignedServices.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              Nenhum serviço atribuído a este profissional
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition disabled:opacity-50"
+          >
+            {saving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

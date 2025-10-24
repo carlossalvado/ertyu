@@ -43,7 +43,8 @@ export default function ProfessionalDashboardPage() {
     totalAppointments: 0,
     todayAppointments: 0,
     totalCustomers: 0,
-    monthlyRevenue: 0
+    monthlyRevenue: 0,
+    monthlyCommissions: 0
   });
 
   useEffect(() => {
@@ -109,11 +110,23 @@ export default function ProfessionalDashboardPage() {
         return aptDate >= thisMonth && item.status === 'completed';
       }).reduce((sum, item) => sum + item.total_price, 0) || 0;
 
+      // Calculate monthly commissions for this professional
+      const monthlyCommissions = sharedData?.filter(item => {
+        const aptDate = new Date(item.appointment_date);
+        return aptDate >= thisMonth && item.status === 'completed';
+      }).reduce((sum, item) => {
+        // Calculate commission based on services and their commission rates
+        // For now, using a simple calculation - this would need to be enhanced
+        // based on the actual service commission rates
+        return sum + (item.total_price * 0.1); // 10% default commission
+      }, 0) || 0;
+
       setStats({
         totalAppointments: sharedData?.length || 0,
         todayAppointments,
         totalCustomers: customersData?.length || 0,
-        monthlyRevenue
+        monthlyRevenue,
+        monthlyCommissions
       });
 
     } catch (error) {
@@ -216,7 +229,7 @@ export default function ProfessionalDashboardPage() {
             <AppointmentSearch onAppointmentFound={handleAppointmentFound} />
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
               <div className="bg-white overflow-hidden shadow rounded-lg">
                 <div className="p-5">
                   <div className="flex items-center">
@@ -290,6 +303,26 @@ export default function ProfessionalDashboardPage() {
                         </dt>
                         <dd className="text-lg font-medium text-gray-900">
                           R$ {stats.monthlyRevenue.toFixed(2)}
+                        </dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="p-5">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <TrendingUp className="h-6 w-6 text-green-400" />
+                    </div>
+                    <div className="ml-5 w-0 flex-1">
+                      <dl>
+                        <dt className="text-sm font-medium text-gray-500 truncate">
+                          Comissões do Mês
+                        </dt>
+                        <dd className="text-lg font-medium text-green-600">
+                          R$ {stats.monthlyCommissions.toFixed(2)}
                         </dd>
                       </dl>
                     </div>

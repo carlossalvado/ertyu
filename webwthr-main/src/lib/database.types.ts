@@ -386,18 +386,21 @@ export type Database = {
       }
       professional_services: {
         Row: {
+          commission: number | null
           created_at: string | null
           id: string
           professional_id: string
           service_id: string
         }
         Insert: {
+          commission?: number | null
           created_at?: string | null
           id?: string
           professional_id: string
           service_id: string
         }
         Update: {
+          commission?: number | null
           created_at?: string | null
           id?: string
           professional_id?: string
@@ -475,6 +478,7 @@ export type Database = {
         Row: {
           active: boolean | null
           created_at: string | null
+          default_commission: number | null
           description: string | null
           duration_minutes: number | null
           id: string
@@ -485,6 +489,7 @@ export type Database = {
         Insert: {
           active?: boolean | null
           created_at?: string | null
+          default_commission?: number | null
           description?: string | null
           duration_minutes?: number | null
           id?: string
@@ -495,6 +500,7 @@ export type Database = {
         Update: {
           active?: boolean | null
           created_at?: string | null
+          default_commission?: number | null
           description?: string | null
           duration_minutes?: number | null
           id?: string

@@ -363,18 +363,23 @@ export default function Calendar({ onAppointmentClick, onDateClick, onProfession
                             e.stopPropagation();
                             onAppointmentClick?.(apt);
                           }}
-                          className="text-xs bg-gradient-to-r from-blue-500 to-blue-600 text-white px-2 py-1 rounded-md shadow-sm hover:from-blue-600 hover:to-blue-700 transition cursor-pointer truncate font-medium"
-                          title={`${apt.customer_name} - ${new Date(apt.appointment_date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}`}
+                          className="text-xs bg-gradient-to-r from-blue-500 to-blue-600 text-white px-2 py-1 rounded-md shadow-sm hover:from-blue-600 hover:to-blue-700 transition cursor-pointer font-medium"
+                          title={`${apt.customer_name} - ${apt.professional_name} - ${new Date(apt.appointment_date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}`}
                         >
-                          <div className="flex items-center justify-between">
-                            <span className="truncate">{apt.customer_name}</span>
-                            <span className="ml-1 text-blue-100 font-bold">
-                              {new Date(apt.appointment_date).toLocaleTimeString('pt-BR', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                timeZone: 'America/Sao_Paulo'
-                              })}
-                            </span>
+                          <div className="flex flex-col">
+                            <div className="flex items-center justify-between">
+                              <span className="truncate font-semibold">{apt.customer_name}</span>
+                              <span className="ml-1 text-blue-100 font-bold">
+                                {new Date(apt.appointment_date).toLocaleTimeString('pt-BR', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  timeZone: 'America/Sao_Paulo'
+                                })}
+                              </span>
+                            </div>
+                            <div className="text-blue-100 text-xs truncate">
+                              {apt.professional_name}
+                            </div>
                           </div>
                         </div>
                       ))}

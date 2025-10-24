@@ -4,12 +4,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { BarChart3, TrendingUp, DollarSign, Package, Scissors } from 'lucide-react';
 
 type ReportPeriod = 'year' | 'semester' | 'quarter' | 'month' | 'last_month';
-type ReportView = 'overview' | 'daily' | 'monthly';
+type ReportView = 'overview' | 'daily' | 'monthly' | 'commissions';
 
 interface ReportData {
   packagesRevenue: number;
   servicesRevenue: number;
   totalRevenue: number;
+  commissionsCost: number;
+  netRevenue: number;
   packageCount: number;
   serviceCount: number;
 }
@@ -25,6 +27,8 @@ export default function ReportsPage() {
     packagesRevenue: 0,
     servicesRevenue: 0,
     totalRevenue: 0,
+    commissionsCost: 0,
+    netRevenue: 0,
     packageCount: 0,
     serviceCount: 0
   });
@@ -109,6 +113,27 @@ export default function ReportsPage() {
           .gte('appointment_date', startDate.toISOString())
           .lte('appointment_date', endDate.toISOString());
 
+        // Get appointment services with commissions
+        const { data: appointmentServicesData } = await supabase
+          .from('appointment_services')
+          .select(`
+            price,
+            appointments!inner(user_id, status, appointment_date),
+            professional_services(commission)
+          `)
+          .eq('appointments.user_id', user.id)
+          .eq('appointments.status', 'completed')
+          .gte('appointments.appointment_date', startDate.toISOString())
+          .lte('appointments.appointment_date', endDate.toISOString());
+
+        // Calculate commissions cost
+        let commissionsCost = 0;
+        appointmentServicesData?.forEach(service => {
+          const commission = (service as any).professional_services?.commission || 0;
+          const servicePrice = service.price || 0;
+          commissionsCost += (servicePrice * commission) / 100;
+        });
+
         const packagesRevenue = packagesData?.reduce((sum, pkg) =>
           sum + Number((pkg.package as any)?.price || 0), 0) || 0;
 
@@ -116,6 +141,7 @@ export default function ReportsPage() {
           sum + Number(apt.total_price), 0) || 0;
 
         const totalRevenue = packagesRevenue + servicesRevenue;
+        const netRevenue = totalRevenue - commissionsCost;
         const packageCount = packagesData?.length || 0;
         const serviceCount = appointmentsData?.length || 0;
 
@@ -123,6 +149,8 @@ export default function ReportsPage() {
           packagesRevenue,
           servicesRevenue,
           totalRevenue,
+          commissionsCost,
+          netRevenue,
           packageCount,
           serviceCount
         });
@@ -142,13 +170,26 @@ export default function ReportsPage() {
           .gte('created_at', dayStart.toISOString())
           .lte('created_at', dayEnd.toISOString());
 
-        const { data: dayAppointments } = await supabase
-          .from('appointments')
-          .select('appointment_date, total_price, status')
-          .eq('user_id', user.id)
-          .eq('status', 'completed')
-          .gte('appointment_date', dayStart.toISOString())
-          .lte('appointment_date', dayEnd.toISOString());
+        // Get appointment services with commissions for the day
+        const { data: dayAppointmentServices } = await supabase
+          .from('appointment_services')
+          .select(`
+            price,
+            appointments!inner(user_id, status, appointment_date),
+            professional_services(commission)
+          `)
+          .eq('appointments.user_id', user.id)
+          .eq('appointments.status', 'completed')
+          .gte('appointments.appointment_date', dayStart.toISOString())
+          .lte('appointments.appointment_date', dayEnd.toISOString());
+
+        // Calculate commissions cost for the day
+        let dayCommissionsCost = 0;
+        dayAppointmentServices?.forEach(service => {
+          const commission = (service as any).professional_services?.commission || 0;
+          const servicePrice = service.price || 0;
+          dayCommissionsCost += (servicePrice * commission) / 100;
+        });
 
         // Calculate totals for the selected day
         const packagesRevenue = dayPackages?.reduce((sum, pkg) =>
@@ -158,6 +199,7 @@ export default function ReportsPage() {
           sum + Number(apt.total_price), 0) || 0;
 
         const totalRevenue = packagesRevenue + servicesRevenue;
+        const netRevenue = totalRevenue - dayCommissionsCost;
         const packageCount = dayPackages?.length || 0;
         const serviceCount = dayAppointments?.length || 0;
 
@@ -166,6 +208,8 @@ export default function ReportsPage() {
           packagesRevenue,
           servicesRevenue,
           totalRevenue,
+          commissionsCost: dayCommissionsCost,
+          netRevenue,
           packageCount,
           serviceCount
         }]);
@@ -182,13 +226,26 @@ export default function ReportsPage() {
           .gte('created_at', monthStart.toISOString())
           .lte('created_at', monthEnd.toISOString());
 
-        const { data: monthAppointments } = await supabase
-          .from('appointments')
-          .select('appointment_date, total_price, status')
-          .eq('user_id', user.id)
-          .eq('status', 'completed')
-          .gte('appointment_date', monthStart.toISOString())
-          .lte('appointment_date', monthEnd.toISOString());
+        // Get appointment services with commissions for the month
+        const { data: monthAppointmentServices } = await supabase
+          .from('appointment_services')
+          .select(`
+            price,
+            appointments!inner(user_id, status, appointment_date),
+            professional_services(commission)
+          `)
+          .eq('appointments.user_id', user.id)
+          .eq('appointments.status', 'completed')
+          .gte('appointments.appointment_date', monthStart.toISOString())
+          .lte('appointments.appointment_date', monthEnd.toISOString());
+
+        // Calculate commissions cost for the month
+        let monthCommissionsCost = 0;
+        monthAppointmentServices?.forEach(service => {
+          const commission = (service as any).professional_services?.commission || 0;
+          const servicePrice = service.price || 0;
+          monthCommissionsCost += (servicePrice * commission) / 100;
+        });
 
         // Calculate totals for the selected month
         const packagesRevenue = monthPackages?.reduce((sum, pkg) =>
@@ -198,6 +255,7 @@ export default function ReportsPage() {
           sum + Number(apt.total_price), 0) || 0;
 
         const totalRevenue = packagesRevenue + servicesRevenue;
+        const netRevenue = totalRevenue - monthCommissionsCost;
         const packageCount = monthPackages?.length || 0;
         const serviceCount = monthAppointments?.length || 0;
 
@@ -206,9 +264,67 @@ export default function ReportsPage() {
           packagesRevenue,
           servicesRevenue,
           totalRevenue,
+          commissionsCost: monthCommissionsCost,
+          netRevenue,
           packageCount,
           serviceCount
         }]);
+      } else if (selectedView === 'commissions') {
+        // Load commission data for the selected period
+        const { data: commissionData } = await supabase
+          .from('appointment_services')
+          .select(`
+            price,
+            appointments!inner(user_id, status, appointment_date),
+            professional_services(
+              commission,
+              professionals(name)
+            )
+          `)
+          .eq('appointments.user_id', user.id)
+          .eq('appointments.status', 'completed')
+          .gte('appointments.appointment_date', startDate.toISOString())
+          .lte('appointments.appointment_date', endDate.toISOString());
+
+        // Process commission data
+        const dailyCommissions: { [date: string]: { [professional: string]: number } } = {};
+        const monthlyCommissions: { [month: string]: { [professional: string]: number } } = {};
+        const professionalTotals: { [professional: string]: number } = {};
+
+        commissionData?.forEach(service => {
+          const appointment = (service as any).appointments;
+          const date = new Date(appointment.appointment_date).toISOString().split('T')[0];
+          const month = date.substring(0, 7); // YYYY-MM format
+
+          const commission = (service as any).professional_services?.commission || 0;
+          const servicePrice = service.price || 0;
+          const commissionAmount = (servicePrice * commission) / 100;
+          const professionalName = (service as any).professional_services?.professionals?.name || 'Desconhecido';
+
+          // Daily totals
+          if (!dailyCommissions[date]) dailyCommissions[date] = {};
+          dailyCommissions[date][professionalName] = (dailyCommissions[date][professionalName] || 0) + commissionAmount;
+
+          // Monthly totals
+          if (!monthlyCommissions[month]) monthlyCommissions[month] = {};
+          monthlyCommissions[month][professionalName] = (monthlyCommissions[month][professionalName] || 0) + commissionAmount;
+
+          // Professional totals
+          professionalTotals[professionalName] = (professionalTotals[professionalName] || 0) + commissionAmount;
+        });
+
+        setDailyData(Object.entries(dailyCommissions).map(([date, professionals]) => ({
+          date,
+          commissions: professionals,
+          totalCommissions: Object.values(professionals).reduce((sum, amount) => sum + amount, 0)
+        })));
+
+        setMonthlyData(Object.entries(monthlyCommissions).map(([month, professionals]) => ({
+          month: parseInt(month.split('-')[1]) - 1, // Convert to month index
+          year: parseInt(month.split('-')[0]),
+          commissions: professionals,
+          totalCommissions: Object.values(professionals).reduce((sum, amount) => sum + amount, 0)
+        })));
       }
     } catch (error) {
       console.error('Error loading report data:', error);
@@ -300,6 +416,16 @@ export default function ReportsPage() {
           >
             Por Mês
           </button>
+          <button
+            onClick={() => setSelectedView('commissions')}
+            className={`px-6 py-2 rounded-lg text-sm font-medium transition ${
+              selectedView === 'commissions'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Comissões
+          </button>
         </div>
       </div>
 
@@ -342,14 +468,116 @@ export default function ReportsPage() {
         </div>
       )}
 
+      {selectedView === 'commissions' && (
+        <>
+          {/* Commission Summary */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">Resumo de Comissões - {getPeriodLabel()}</h2>
+
+            {/* Daily Commissions Table */}
+            <div className="mb-8">
+              <h3 className="text-lg font-medium text-gray-700 mb-4">Comissões por Dia</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Data
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Profissional
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Comissão
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {dailyData.length > 0 ? dailyData.map((day: any) =>
+                      Object.entries(day.commissions || {}).map(([professional, amount]) => (
+                        <tr key={`${day.date}-${professional}`}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {new Date(day.date).toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {professional}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            R$ {Number(amount).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500">
+                          Nenhuma comissão encontrada para o período
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Monthly Commissions Table */}
+            <div className="mb-8">
+              <h3 className="text-lg font-medium text-gray-700 mb-4">Comissões por Mês</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Mês
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Profissional
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Comissão
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {monthlyData.length > 0 ? monthlyData.map((month: any) =>
+                      Object.entries(month.commissions || {}).map(([professional, amount]) => (
+                        <tr key={`${month.month}-${professional}`}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {[
+                              'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                              'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+                            ][month.month]} {month.year}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {professional}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            R$ {Number(amount).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500">
+                          Nenhuma comissão encontrada para o período
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {selectedView === 'overview' && (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Receita Total</p>
+                  <p className="text-sm text-gray-600 mb-1">Receita Bruta</p>
                   <p className="text-2xl font-bold text-gray-800">R$ {reportData.totalRevenue.toFixed(2)}</p>
                 </div>
                 <div className="bg-green-50 p-3 rounded-xl">
@@ -361,11 +589,23 @@ export default function ReportsPage() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Pacotes Vendidos</p>
-                  <p className="text-2xl font-bold text-gray-800">{reportData.packageCount}</p>
+                  <p className="text-sm text-gray-600 mb-1">Comissões Pagas</p>
+                  <p className="text-2xl font-bold text-red-600">R$ {reportData.commissionsCost.toFixed(2)}</p>
+                </div>
+                <div className="bg-red-50 p-3 rounded-xl">
+                  <TrendingUp className="w-6 h-6 text-red-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Receita Líquida</p>
+                  <p className="text-2xl font-bold text-blue-600">R$ {reportData.netRevenue.toFixed(2)}</p>
                 </div>
                 <div className="bg-blue-50 p-3 rounded-xl">
-                  <Package className="w-6 h-6 text-blue-600" />
+                  <BarChart3 className="w-6 h-6 text-blue-600" />
                 </div>
               </div>
             </div>

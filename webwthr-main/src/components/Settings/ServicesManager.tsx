@@ -10,6 +10,7 @@ interface Service {
   price: number;
   duration_minutes: number;
   active: boolean;
+  default_commission: number;
 }
 
 export default function ServicesManager() {
@@ -23,7 +24,8 @@ export default function ServicesManager() {
     name: '',
     description: '',
     price: '',
-    duration_minutes: ''
+    duration_minutes: '',
+    default_commission: ''
   });
 
   useEffect(() => {
@@ -57,7 +59,8 @@ export default function ServicesManager() {
         name: formData.name,
         description: formData.description,
         price: parseFloat(formData.price),
-        duration_minutes: parseInt(formData.duration_minutes)
+        duration_minutes: parseInt(formData.duration_minutes),
+        default_commission: parseFloat(formData.default_commission) || 0
       };
 
       if (editingService) {
@@ -80,7 +83,7 @@ export default function ServicesManager() {
 
       setIsModalOpen(false);
       setEditingService(null);
-      setFormData({ name: '', description: '', price: '', duration_minutes: '' });
+      setFormData({ name: '', description: '', price: '', duration_minutes: '', default_commission: '' });
       loadServices();
     } catch (error) {
       console.error('Error saving service:', error);
@@ -95,7 +98,8 @@ export default function ServicesManager() {
       name: service.name,
       description: service.description,
       price: service.price.toString(),
-      duration_minutes: service.duration_minutes.toString()
+      duration_minutes: service.duration_minutes.toString(),
+      default_commission: service.default_commission?.toString() || '0'
     });
     setIsModalOpen(true);
   };
@@ -204,7 +208,7 @@ export default function ServicesManager() {
           <button
             onClick={() => {
               setEditingService(null);
-              setFormData({ name: '', description: '', price: '', duration_minutes: '' });
+              setFormData({ name: '', description: '', price: '', duration_minutes: '', default_commission: '' });
               setIsModalOpen(true);
             }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition"
@@ -313,36 +317,52 @@ export default function ServicesManager() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Preço (R$)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
-                </div>
+             <div className="grid grid-cols-2 gap-4">
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                   Preço (R$)
+                 </label>
+                 <input
+                   type="number"
+                   step="0.01"
+                   min="0"
+                   value={formData.price}
+                   onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                   required
+                 />
+               </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Duração (min)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.duration_minutes}
-                    onChange={(e) => setFormData({ ...formData, duration_minutes: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-              </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                   Duração (min)
+                 </label>
+                 <input
+                   type="number"
+                   min="1"
+                   value={formData.duration_minutes}
+                   onChange={(e) => setFormData({ ...formData, duration_minutes: e.target.value })}
+                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                   required
+                 />
+               </div>
+             </div>
+
+             <div>
+               <label className="block text-sm font-medium text-gray-700 mb-1">
+                 Comissão Padrão (%)
+               </label>
+               <input
+                 type="number"
+                 step="0.01"
+                 min="0"
+                 max="100"
+                 value={formData.default_commission}
+                 onChange={(e) => setFormData({ ...formData, default_commission: e.target.value })}
+                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                 placeholder="0.00"
+               />
+             </div>
 
               <div className="flex gap-3 pt-4">
                 <button
