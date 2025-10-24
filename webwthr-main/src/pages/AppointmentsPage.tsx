@@ -185,7 +185,10 @@ export default function AppointmentsPage() {
           </div>
 
           <div className="p-6">
-            {activeTab === 'list' && <AppointmentsList refreshTrigger={refreshTrigger} onReschedule={() => {}} />}
+            {activeTab === 'list' && <AppointmentsList refreshTrigger={refreshTrigger} onReschedule={(appointment) => {
+              setRescheduleAppointment(appointment);
+              setActiveTab('reschedule');
+            }} />}
             {activeTab === 'new' && <AppointmentForm onSuccess={handleAppointmentCreated} prefillData={prefillData} />}
             {activeTab === 'reschedule' && rescheduleAppointment && (
               <AppointmentForm

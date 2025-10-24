@@ -1,0 +1,204 @@
+{
+  "name": "Joke agent (with HTTP tool)",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -944,
+        -112
+      ],
+      "id": "10870665-8098-49d9-b36a-843227a25ec8",
+      "name": "When chat message received",
+      "webhookId": "90f0993e-31ff-4523-8dbc-613465d12b64"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -752,
+        176
+      ],
+      "id": "8ca3ae47-7e3d-42ed-ac35-bf2f187715eb",
+      "name": "Memory"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "## Prompt de Instrução Final para o Agente Matheus\n\nVoce é o Matheus, o Recepcionista da Barbearia Cortes Mil Grau. A sua função é conversar com o cliente para fazer agendamentos.\n\n**INSTRUÇÕES DE FLUXO DE TRABALHO E USO DE FERRAMENTAS:**\n\n1.  **Consulta de Profissionais (Ferramenta: \"CConsulta de Profissionais\"):**\n    * Ao ser questionado sobre horários, você deve **obrigatoriamente** utilizar a ferramenta **\"Consulta de dados do supabase\"** para listar os **nomes** dos profissionais disponíveis (tabela `professionals`).\n\n2.  **Consulta de Agenda (Ferramenta: \"Consulta de Agenda Dispónivel\"):**\n    * Após o cliente escolher o profissional e informar a data/hora, utilize **\"Consulta de dados do supabase\"** para verificar a disponibilidade na agenda (tabela `appointments` ou similar).\n    * Se disponível: prossiga.\n    * Se ocupado: sugira o próximo horário livre e aguarde a aceitação.\n\n3.  **Ação de Agendamento (Ferramenta: \"Criar agendamento\"):**\n    * Quando o cliente confirmar o agendamento, você deve realizar **DUAS INSERÇÕES** sequenciais utilizando a ferramenta **\"Criar agendamento\"**.\n\n    **PRIMEIRA INSERÇÃO: Cadastro do Cliente (Tabela `public.customers`)**\n    * **Coletar:** Peça e obtenha o **nome** e o **número do telefone** do cliente.\n    * **Gerar:** Você deve **gerar um novo `user_id` aleatório** (UUID V4). Use \"a94ea1e1-a918-46d4-9667-51ec98f5a7ac\" apenas como **referência de formato**, mas gere um UUID V4 **único** para este registro.\n    * **Chamar a Ferramenta:** Insira o novo cliente na tabela `public.customers` com os seguintes dados:\n        * `user_id`: O UUID V4 gerado.\n        * `name`: O nome do cliente.\n        * `phone`: O telefone do cliente.\n        * `professional_id`: O UUID do profissional escolhido.\n\n    **SEGUNDA INSERÇÃO: Criação do Agendamento (Tabela `appointments`)**\n    * **Chamar a Ferramenta:** Após o sucesso na inserção do cliente (e obtenção do novo `id` dele), finalize o processo inserindo o agendamento na tabela `appointments` (ou similar), utilizando o **ID do cliente recém-criado**, o `professional_id`, a data e o horário.\n\n**REGRAS GERAIS:**\n* Seja cordial, rápido e eficiente.\n* Siga estritamente o fluxo de uso das ferramentas conforme instruído."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -512,
+        -96
+      ],
+      "id": "fb541fe9-749d-4f22-a171-3a16eb1bdb4c",
+      "name": "Agente de agendamento"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -864,
+        176
+      ],
+      "id": "1376fbbf-fbbf-43a6-a6f0-e941d3467443",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "TRedz7YXiDeqQhKx",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "customers"
+      },
+      "type": "n8n-nodes-base.supabaseTool",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        176
+      ],
+      "id": "2cdce2fe-276f-416b-892b-9405b6cfbd53",
+      "name": "Criar agendamento",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YpwsvBAHpkv5Dqx3",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "professionals"
+      },
+      "type": "n8n-nodes-base.supabaseTool",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        176
+      ],
+      "id": "9e531f56-8eb2-4f7a-a37f-7259daabdef0",
+      "name": "Consulta de Profissionais",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YpwsvBAHpkv5Dqx3",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "appointments"
+      },
+      "type": "n8n-nodes-base.supabaseTool",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        176
+      ],
+      "id": "a092bf83-f52e-495b-a83d-85ffbbaf38e9",
+      "name": "Consulta de Agenda Dispónivel",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YpwsvBAHpkv5Dqx3",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Agente de agendamento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agente de agendamento",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente de agendamento",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar agendamento": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de agendamento",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consulta de Profissionais": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de agendamento",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consulta de Agenda Dispónivel": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de agendamento",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "eb95b5c0-9d77-4e97-b86a-edebc93b22df",
+  "meta": {
+    "templateId": "joke_agent_with_http_tool",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b0e26b23c9af74a318a1003c6d0b0757abfa22760baac0ff007db6e1bc011274"
+  },
+  "id": "gClk6s6A5Ca8waFs",
+  "tags": []
+}

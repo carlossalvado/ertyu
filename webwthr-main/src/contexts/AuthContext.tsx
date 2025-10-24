@@ -45,9 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabase.from('users').insert({
         id: data.user.id,
         email: data.user.email!,
-        business_name: '',
-        whatsapp_connected: false,
-        whatsapp_number: ''
+        business_name: ''
       });
     }
   };

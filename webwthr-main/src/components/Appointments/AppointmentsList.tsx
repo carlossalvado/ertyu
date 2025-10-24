@@ -66,11 +66,11 @@ export default function AppointmentsList({ refreshTrigger, onReschedule }: Appoi
           status: item.status,
           total_price: item.total_price,
           notes: item.notes,
-          professional_name: professional.name,
+          professional_name: professional?.name || 'Profissional',
           services: Array.isArray(item.services) ? item.services.map((s: any) => ({
-            service: { name: s.name },
-            price: s.price,
-            used_package_session: s.used_package_session
+            service: { name: s?.name || 'Serviço' },
+            price: s?.price || 0,
+            used_package_session: s?.used_package_session || false
           })) : []
         })) || [];
       } else {
@@ -93,7 +93,7 @@ export default function AppointmentsList({ refreshTrigger, onReschedule }: Appoi
 
         data = appointmentsData?.map(apt => ({
           ...apt,
-          professional_name: (apt.professionals as any)?.name,
+          professional_name: (apt.professionals as any)?.name || 'Profissional',
           services: (apt.services as any) || []
         })) || [];
       }
@@ -380,7 +380,7 @@ export default function AppointmentsList({ refreshTrigger, onReschedule }: Appoi
                   <Scissors className="w-4 h-4 text-gray-500" />
                   <span className="text-sm text-gray-700">
                     {appointment.services?.length === 1
-                      ? appointment.services[0].service.name
+                      ? appointment.services[0]?.service?.name || 'Serviço'
                       : `${appointment.services?.length || 0} serviços`
                     }
                   </span>

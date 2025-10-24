@@ -3,28 +3,19 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProfessionalAuthProvider, useProfessionalAuth } from './contexts/ProfessionalAuthContext';
 import LoginPage from './pages/LoginPage';
 import ProfessionalDashboardPage from './pages/ProfessionalDashboardPage';
-import WhatsAppConnect from './components/WhatsApp/WhatsAppConnect';
-import WhatsAppAgentConfig from './pages/WhatsAppAgentConfig';
-import ChatPage from './pages/ChatPage';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import CustomersPage from './pages/CustomersPage';
 import ProfessionalsPage from './pages/ProfessionalsPage';
 import Navbar from './components/Layout/Navbar';
-import { supabase } from './lib/supabase';
 
 function AppContent() {
   const { user, loading: authLoading } = useAuth();
   const { professional, loading: profLoading } = useProfessionalAuth();
-  const [isWhatsAppConnected, setIsWhatsAppConnected] = useState(false);
-  const [currentView, setCurrentView] = useState<'chat' | 'dashboard' | 'settings' | 'appointments' | 'customers' | 'professionals' | 'whatsapp'>('whatsapp');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'settings' | 'appointments' | 'customers' | 'professionals'>('dashboard');
 
   useEffect(() => {
-    if (user) {
-      checkWhatsAppConnection();
-    }
-
     // Listen for navigation events from child components
     const handleNavigateToAppointments = (event: any) => {
       console.log('Navigation event received:', event.detail);
@@ -51,19 +42,7 @@ function AppContent() {
       window.removeEventListener('navigateToAppointments', handleNavigateToAppointments);
       window.removeEventListener('navigateToView', handleNavigateToView);
     };
-  }, [user]);
-
-  const checkWhatsAppConnection = async () => {
-    const { data } = await supabase
-      .from('users')
-      .select('whatsapp_connected')
-      .eq('id', user!.id)
-      .maybeSingle();
-
-    if (data?.whatsapp_connected) {
-      setIsWhatsAppConnected(true);
-    }
-  };
+  }, []);
 
   if (authLoading || profLoading) {
     return (
@@ -86,13 +65,10 @@ function AppContent() {
     return <LoginPage />;
   }
 
-  // Sempre mostrar página do WhatsApp Agent (tela principal)
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar currentView={currentView} onViewChange={setCurrentView} />
       <div className="pt-6">
-        {currentView === 'whatsapp' && <WhatsAppAgentConfig />}
-        {currentView === 'chat' && <ChatPage />}
         {currentView === 'dashboard' && <DashboardPage />}
         {currentView === 'settings' && <SettingsPage />}
         {currentView === 'appointments' && <AppointmentsPage />}

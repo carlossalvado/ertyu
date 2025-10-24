@@ -88,9 +88,9 @@ export default function Calendar({ onAppointmentClick, onDateClick, onProfession
           appointment_date: apt.appointment_date,
           status: apt.status,
           total_price: apt.total_price,
-          professional_name: professional.name,
+          professional_name: professional?.name || 'Profissional',
           service_name: Array.isArray(apt.services) && apt.services.length === 1
-            ? apt.services[0].name
+            ? apt.services[0]?.name || 'Serviço'
             : `${apt.services?.length || 0} serviços`,
           notes: apt.notes
         }));
@@ -98,9 +98,9 @@ export default function Calendar({ onAppointmentClick, onDateClick, onProfession
         // Format regular appointment data
         formatted = data.map(apt => ({
           ...apt,
-          professional_name: (apt.professionals as any)?.name,
+          professional_name: (apt.professionals as any)?.name || 'Profissional',
           service_name: (apt.services as any)?.length === 1
-            ? (apt.services as any)[0].service.name
+            ? (apt.services as any)[0]?.service?.name || 'Serviço'
             : `${(apt.services as any)?.length || 0} serviços`
         }));
       }

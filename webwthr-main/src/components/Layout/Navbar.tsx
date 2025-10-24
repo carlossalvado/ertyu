@@ -1,9 +1,9 @@
-import { MessageCircle, BarChart3, Settings, Calendar, LogOut, Menu, Users } from 'lucide-react';
+import { BarChart3, Settings, Calendar, LogOut, Menu, Users } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface NavbarProps {
-  currentView: 'chat' | 'dashboard' | 'settings' | 'appointments' | 'customers' | 'professionals' | 'whatsapp';
-  onViewChange: (view: 'chat' | 'dashboard' | 'settings' | 'appointments' | 'customers' | 'professionals' | 'whatsapp') => void;
+  currentView: 'dashboard' | 'settings' | 'appointments' | 'customers' | 'professionals';
+  onViewChange: (view: 'dashboard' | 'settings' | 'appointments' | 'customers' | 'professionals') => void;
 }
 
 export default function Navbar({ currentView, onViewChange }: NavbarProps) {
@@ -14,24 +14,13 @@ export default function Navbar({ currentView, onViewChange }: NavbarProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-6">
           <div className="flex items-center space-x-2">
-            <div className="bg-green-600 p-2 rounded-lg">
-              <MessageCircle className="w-6 h-6 text-white" />
+            <div className="bg-blue-600 p-2 rounded-lg">
+              <Calendar className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold text-gray-800">WhatsApp AI</span>
+            <span className="text-xl font-bold text-gray-800">Sistema de Agendamentos</span>
           </div>
 
           <div className="hidden md:flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => onViewChange('whatsapp')}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
-                currentView === 'whatsapp'
-                  ? 'bg-white text-green-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              <MessageCircle className="w-5 h-5" />
-              <span className="font-medium">WhatsApp</span>
-            </button>
             <button
               onClick={() => onViewChange('dashboard')}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
@@ -42,17 +31,6 @@ export default function Navbar({ currentView, onViewChange }: NavbarProps) {
             >
               <BarChart3 className="w-5 h-5" />
               <span className="font-medium">Dashboard</span>
-            </button>
-            <button
-              onClick={() => onViewChange('chat')}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
-                currentView === 'chat'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              <MessageCircle className="w-5 h-5" />
-              <span className="font-medium">Chat</span>
             </button>
             <button
               onClick={() => onViewChange('settings')}
@@ -106,17 +84,6 @@ export default function Navbar({ currentView, onViewChange }: NavbarProps) {
 
       <div className="md:hidden mt-4 flex space-x-2">
         <button
-          onClick={() => onViewChange('whatsapp')}
-          className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-lg transition ${
-            currentView === 'whatsapp'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-100 text-gray-600'
-          }`}
-        >
-          <MessageCircle className="w-5 h-5" />
-          <span className="font-medium">WhatsApp</span>
-        </button>
-        <button
           onClick={() => onViewChange('dashboard')}
           className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-lg transition ${
             currentView === 'dashboard'
@@ -126,17 +93,6 @@ export default function Navbar({ currentView, onViewChange }: NavbarProps) {
         >
           <BarChart3 className="w-5 h-5" />
           <span className="font-medium">Dashboard</span>
-        </button>
-        <button
-          onClick={() => onViewChange('chat')}
-          className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-lg transition ${
-            currentView === 'chat'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-600'
-          }`}
-        >
-          <MessageCircle className="w-5 h-5" />
-          <span className="font-medium">Chat</span>
         </button>
         <button
           onClick={() => onViewChange('settings')}
