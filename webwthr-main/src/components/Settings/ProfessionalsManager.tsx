@@ -671,7 +671,10 @@ export default function ProfessionalsManager() {
           services={services}
           onClose={() => setIsServicesModalOpen(false)}
           onUpdate={updateProfessionalServices}
-          loadProfessionalServices={loadProfessionalServices}
+          loadProfessionalServices={async (professionalId: string) => {
+            const data = await loadProfessionalServices(professionalId);
+            return data.map(item => item.serviceId);
+          }}
         />
       )}
 

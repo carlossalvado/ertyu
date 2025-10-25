@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Users, Phone, ArrowLeft, ChevronDown, ChevronUp, Edit, Trash2, Package, ShoppingCart, RefreshCw, AlertTriangle, CheckCircle } from 'lucide-react';
+import { User, Users, ArrowLeft, ChevronDown, Edit, Trash2, Package, ShoppingCart, RefreshCw, AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface Professional {
   id: string;

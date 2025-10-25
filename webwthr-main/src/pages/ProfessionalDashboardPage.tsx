@@ -9,19 +9,11 @@ import Charts from '../components/Dashboard/Charts';
 import CalendarComponent from '../components/Dashboard/Calendar';
 import AppointmentSearch from '../components/Dashboard/AppointmentSearch';
 
-interface Appointment {
+interface Customer {
   id: string;
-  customer_name: string;
-  customer_phone: string;
-  appointment_date: string;
-  status: string;
-  total_price: number;
-  notes: string;
-  services: Array<{
-    service: {
-      name: string;
-    };
-  }>;
+  name: string;
+  phone: string;
+  professional_id: string;
 }
 
 interface Customer {
@@ -34,8 +26,7 @@ interface Customer {
 export default function ProfessionalDashboardPage() {
   const { professional, logout } = useProfessionalAuth();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'appointments' | 'new-appointment' | 'customers' | 'reports' | 'calendar'>('dashboard');
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [selectedCustomerForAppointment, setSelectedCustomerForAppointment] = useState<Customer | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
@@ -78,22 +69,22 @@ export default function ProfessionalDashboardPage() {
       if (customersError) throw customersError;
 
       // Transform shared data to match appointment interface
-      const transformedAppointments = (sharedData || []).map(item => ({
-        id: item.appointment_id,
-        customer_name: item.customer_name,
-        customer_phone: item.customer_phone,
-        appointment_date: item.appointment_date,
-        status: item.status,
-        total_price: item.total_price,
-        notes: item.notes,
-        services: Array.isArray(item.services) ? item.services.map((s: any) => ({
-          service: {
-            name: s.name || 'Serviço'
-          }
-        })) : []
-      }));
+      // const transformedAppointments = (sharedData || []).map(item => ({
+      //   id: item.appointment_id,
+      //   customer_name: item.customer_name,
+      //   customer_phone: item.customer_phone,
+      //   appointment_date: item.appointment_date,
+      //   status: item.status,
+      //   total_price: item.total_price,
+      //   notes: item.notes,
+      //   services: Array.isArray(item.services) ? item.services.map((s: any) => ({
+      //     service: {
+      //       name: s.name || 'Serviço'
+      //     }
+      //   })) : []
+      // }));
 
-      setCustomers(customersData || []);
+      // setCustomers(customersData || []);
 
       // Calculate stats
       const now = new Date();

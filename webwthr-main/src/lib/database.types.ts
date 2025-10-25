@@ -937,6 +937,74 @@ export type Database = {
           },
         ]
       }
+      professional_commissions: {
+        Row: {
+          id: string
+          professional_id: string
+          appointment_service_id: string
+          appointment_id: string
+          service_price: number
+          commission_percentage: number
+          commission_amount: number
+          paid_at: string | null
+          created_at: string | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          professional_id: string
+          appointment_service_id: string
+          appointment_id: string
+          service_price: number
+          commission_percentage: number
+          commission_amount: number
+          paid_at?: string | null
+          created_at?: string | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          professional_id?: string
+          appointment_service_id?: string
+          appointment_id?: string
+          service_price?: number
+          commission_percentage?: number
+          commission_amount?: number
+          paid_at?: string | null
+          created_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_commissions_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_commissions_appointment_service_id_fkey"
+            columns: ["appointment_service_id"]
+            isOneToOne: false
+            referencedRelation: "appointment_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_commissions_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_commissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_keys: {
         Row: {
           api_key_encrypted: string

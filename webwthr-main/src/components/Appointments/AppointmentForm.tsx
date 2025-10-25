@@ -621,135 +621,6 @@ export default function AppointmentForm({ onSuccess, rescheduleData, prefillData
     }
   };
 
-  const createAppointment = async (appointmentDateTime: Date) => {
-    // Calculate total price and prepare services
-    let totalPrice = 0;
-    const appointmentServices = [];
-
-    for (const selectedService of selectedServices) {
-      const service = services.find(s => s.id === selectedService.service_id);
-      if (!service) throw new Error('Serviço não encontrado');
-
-      let price = service.price;
-      let usedPackageSession = false;
-
-      if (service.has_package) {
-        // Service has package available, use it automatically
-        price = 0;
-        usedPackageSession = true;
-        // Find which package to use for this service
-        const availablePackage = customerPackages.find(cp =>
-          cp.package.services.some(ps => ps.service_id === selectedService.service_id && (ps.customer_sessions as any)?.sessions_remaining > 0)
-        );
-        if (availablePackage) {
-          selectedService.package_id = availablePackage.id;
-        }
-      }
-
-      totalPrice += price;
-      appointmentServices.push({
-        service_id: selectedService.service_id,
-        price,
-        used_package_session: usedPackageSession
-      });
-    }
-
-    // Create appointment
-    const { data: appointment, error: appointmentError } = await supabase
-      .from('appointments')
-      .insert({
-        user_id: user?.id,
-        professional_id: formData.professional_id,
-        customer_name: formData.customer_name,
-        customer_phone: formData.customer_phone,
-        appointment_date: appointmentDateTime.toISOString(),
-        total_price: totalPrice,
-        notes: formData.notes,
-        status: 'pending'
-      })
-      .select()
-      .single();
-
-    if (appointmentError) throw appointmentError;
-
-    // Create appointment services
-    const servicesToInsert = appointmentServices.map(service => ({
-      appointment_id: appointment.id,
-      service_id: service.service_id,
-      price: service.price,
-      used_package_session: service.used_package_session
-    }));
-
-    const { error: servicesError } = await supabase
-      .from('appointment_services')
-      .insert(servicesToInsert);
-
-    if (servicesError) throw servicesError;
-
-    // Update package sessions if used
-    for (let i = 0; i < selectedServices.length; i++) {
-      const selectedService = selectedServices[i];
-      if (appointmentServices[i].used_package_session && selectedService.package_id) {
-        // First get current sessions_remaining
-        const { data: currentData } = await supabase
-          .from('customer_package_services')
-          .select('sessions_remaining')
-          .eq('customer_package_id', selectedService.package_id)
-          .eq('service_id', selectedService.service_id)
-          .single();
-
-        if (currentData && currentData.sessions_remaining > 0) {
-          const { error: updateError } = await supabase
-            .from('customer_package_services')
-            .update({
-              sessions_remaining: currentData.sessions_remaining - 1,
-              updated_at: new Date().toISOString()
-            })
-            .eq('customer_package_id', selectedService.package_id)
-            .eq('service_id', selectedService.service_id);
-
-          if (updateError) throw updateError;
-        }
-      }
-    }
-
-    // Create or update customer record
-    if (selectedCustomer) {
-      // Update existing customer
-      await supabase
-        .from('customers')
-        .update({
-          name: formData.customer_name,
-          professional_id: formData.professional_id, // Update professional assignment
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedCustomer.id);
-    } else {
-      // Create new customer with professional assignment
-      await supabase
-        .from('customers')
-        .insert({
-          user_id: user?.id,
-          name: formData.customer_name,
-          phone: formData.customer_phone,
-          professional_id: formData.professional_id // Assign to selected professional
-        });
-    }
-
-    // Reset form
-    setFormData({
-      customer_name: '',
-      customer_phone: '',
-      professional_id: '',
-      appointment_date: '',
-      appointment_time: '',
-      notes: ''
-    });
-    setSelectedCustomer(null);
-    setSelectedServices([]);
-    setCustomerPackages([]);
-    setOverlapDetails(null);
-  };
 
   const handleConfirmOverlap = async () => {
     if (!overlapDetails) return;
@@ -932,7 +803,7 @@ export default function AppointmentForm({ onSuccess, rescheduleData, prefillData
                 conflita com os seguintes agendamentos:
               </p>
               <div className="space-y-2">
-                {overlapDetails.conflictingAppointments.map((apt, index) => (
+                {overlapDetails.conflictingAppointments.map((apt) => (
                   <div key={apt.id} className="bg-yellow-50 border border-yellow-200 rounded p-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-yellow-800">{apt.customer_name}</span>

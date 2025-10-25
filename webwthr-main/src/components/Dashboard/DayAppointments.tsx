@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Clock, User, Scissors, DollarSign, Trash2, Edit, RotateCcw, Users, CheckCircle, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { X, Clock, User, Scissors, DollarSign, Trash2, RotateCcw, Users, CheckCircle, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import AppointmentSearch from './AppointmentSearch';
@@ -168,19 +168,6 @@ export default function DayAppointments({ selectedDate, selectedProfessional, on
     }
   };
 
-  const handleReschedule = (appointment: Appointment) => {
-    setSelectedAppointment(appointment);
-    // Pre-fill the datetime input with current appointment date in dd/mm/yyyy format
-    const currentDate = new Date(appointment.appointment_date);
-    const year = currentDate.getFullYear();
-    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-    const day = String(currentDate.getDate()).padStart(2, '0');
-    const hours = String(currentDate.getHours()).padStart(2, '0');
-    const minutes = String(currentDate.getMinutes()).padStart(2, '0');
-    const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-    setNewDateTime(localDateTime);
-    setShowRescheduleModal(true);
-  };
 
   const handleChangeProfessional = (appointment: Appointment) => {
     setSelectedAppointment(appointment);

@@ -41,7 +41,7 @@ export function ProfessionalAuthProvider({ children }: { children: ReactNode }) 
       setLoading(true);
 
       // Authenticate professional directly with Supabase Auth (same as admin)
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      const { error: authError } = await supabase.auth.signInWithPassword({
         email: email,
         password: password
       });

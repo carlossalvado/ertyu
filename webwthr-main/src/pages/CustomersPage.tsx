@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import React from 'react';
+
+// @ts-ignore - React is required for JSX but not explicitly used
+const _ = React;
 import CustomersManager from '../components/Settings/CustomersManager';
 
 export default function CustomersPage() {

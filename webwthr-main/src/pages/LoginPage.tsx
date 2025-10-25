@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { useProfessionalAuth } from '../contexts/ProfessionalAuthContext';
 import LoginForm from '../components/Auth/LoginForm';
 import ProfessionalLoginForm from '../components/Auth/ProfessionalLoginForm';
 

@@ -7,20 +7,8 @@ import AppointmentSearch from '../components/Dashboard/AppointmentSearch';
 import ReportsPage from './ReportsPage';
 import ProfessionalsPage from './ProfessionalsPage';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-
-interface Appointment {
-  id: string;
-  customer_name: string;
-  appointment_date: string;
-  status: string;
-  price: number;
-  professional_name?: string;
-  service_name?: string;
-}
 
 export default function DashboardPage() {
-  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<string | null>(null);
   const [showDayView, setShowDayView] = useState(false);
@@ -28,7 +16,6 @@ export default function DashboardPage() {
   const [showProfessionals, setShowProfessionals] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
-  const [professionals, setProfessionals] = useState<any[]>([]);
   const [refreshCalendar, setRefreshCalendar] = useState(0);
 
   const handleDateClick = (date: Date) => {
@@ -71,18 +58,6 @@ export default function DashboardPage() {
     setSelectedAppointment(null);
   };
 
-  const loadProfessionals = async () => {
-    if (!user) return;
-
-    const { data } = await supabase
-      .from('professionals')
-      .select('id, name, specialty')
-      .eq('user_id', user.id)
-      .eq('active', true)
-      .order('name');
-
-    setProfessionals(data || []);
-  };
 
   const updateAppointmentStatus = async (appointmentId: string, newStatus: string) => {
     try {

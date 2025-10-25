@@ -328,7 +328,7 @@ export default function Charts() {
                   return Object.entries(groupedByDate)
                     .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
                     .map(([date, dayAppointments]) => {
-                      const professionalStats = dayAppointments.reduce((acc: any, apt: any) => {
+                      const professionalStats = (dayAppointments as any[]).reduce((acc: Record<string, { count: number; revenue: number }>, apt: any) => {
                         const prof = (apt.professionals as any)?.name || 'Sem Profissional';
                         if (!acc[prof]) {
                           acc[prof] = { count: 0, revenue: 0 };

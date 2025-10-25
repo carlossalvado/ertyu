@@ -113,26 +113,20 @@ export default function ReportsPage() {
           .gte('appointment_date', startDate.toISOString())
           .lte('appointment_date', endDate.toISOString());
 
-        // Get appointment services with commissions
-        const { data: appointmentServicesData } = await supabase
-          .from('appointment_services')
-          .select(`
-            price,
-            appointments!inner(user_id, status, appointment_date),
-            professional_services(commission)
-          `)
-          .eq('appointments.user_id', user.id)
-          .eq('appointments.status', 'completed')
-          .gte('appointments.appointment_date', startDate.toISOString())
-          .lte('appointments.appointment_date', endDate.toISOString());
+        // Calculate commissions from professional_commissions (trigger-populated)
+        const { data: commissionRows } = await supabase
+          .from('professional_commissions')
+          .select('commission_amount')
+          .eq('user_id', user.id)
+          .gte('paid_at', startDate.toISOString())
+          .lte('paid_at', endDate.toISOString());
 
-        // Calculate commissions cost
-        let commissionsCost = 0;
-        appointmentServicesData?.forEach(service => {
-          const commission = (service as any).professional_services?.commission || 0;
-          const servicePrice = service.price || 0;
-          commissionsCost += (servicePrice * commission) / 100;
-        });
+        console.log('Commission rows found:', commissionRows?.length || 0);
+
+        // Sum commission_amount values
+        const commissionsCost = commissionRows?.reduce((sum, row) => {
+          return sum + Number((row as any).commission_amount || 0);
+        }, 0) || 0;
 
         const packagesRevenue = packagesData?.reduce((sum, pkg) =>
           sum + Number((pkg.package as any)?.price || 0), 0) || 0;
@@ -170,26 +164,27 @@ export default function ReportsPage() {
           .gte('created_at', dayStart.toISOString())
           .lte('created_at', dayEnd.toISOString());
 
-        // Get appointment services with commissions for the day
-        const { data: dayAppointmentServices } = await supabase
-          .from('appointment_services')
-          .select(`
-            price,
-            appointments!inner(user_id, status, appointment_date),
-            professional_services(commission)
-          `)
-          .eq('appointments.user_id', user.id)
-          .eq('appointments.status', 'completed')
-          .gte('appointments.appointment_date', dayStart.toISOString())
-          .lte('appointments.appointment_date', dayEnd.toISOString());
+        // Get services revenue from completed appointments for the day
+        const { data: dayAppointments } = await supabase
+          .from('appointments')
+          .select('total_price, status, appointment_date')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .gte('appointment_date', dayStart.toISOString())
+          .lte('appointment_date', dayEnd.toISOString());
+
+        // Calculate commissions for the day from professional_commissions
+        const { data: dayCommissionRows } = await supabase
+          .from('professional_commissions')
+          .select('commission_amount')
+          .eq('user_id', user.id)
+          .gte('paid_at', dayStart.toISOString())
+          .lte('paid_at', dayEnd.toISOString());
 
         // Calculate commissions cost for the day
-        let dayCommissionsCost = 0;
-        dayAppointmentServices?.forEach(service => {
-          const commission = (service as any).professional_services?.commission || 0;
-          const servicePrice = service.price || 0;
-          dayCommissionsCost += (servicePrice * commission) / 100;
-        });
+        const dayCommissionsCost = dayCommissionRows?.reduce((sum, row) => {
+          return sum + Number((row as any).commission_amount || 0);
+        }, 0) || 0;
 
         // Calculate totals for the selected day
         const packagesRevenue = dayPackages?.reduce((sum, pkg) =>
@@ -226,26 +221,27 @@ export default function ReportsPage() {
           .gte('created_at', monthStart.toISOString())
           .lte('created_at', monthEnd.toISOString());
 
-        // Get appointment services with commissions for the month
-        const { data: monthAppointmentServices } = await supabase
-          .from('appointment_services')
-          .select(`
-            price,
-            appointments!inner(user_id, status, appointment_date),
-            professional_services(commission)
-          `)
-          .eq('appointments.user_id', user.id)
-          .eq('appointments.status', 'completed')
-          .gte('appointments.appointment_date', monthStart.toISOString())
-          .lte('appointments.appointment_date', monthEnd.toISOString());
+        // Get services revenue from completed appointments for the month
+        const { data: monthAppointments } = await supabase
+          .from('appointments')
+          .select('total_price, status, appointment_date')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .gte('appointment_date', monthStart.toISOString())
+          .lte('appointment_date', monthEnd.toISOString());
+
+        // Calculate commissions for the month from professional_commissions
+        const { data: monthCommissionRows } = await supabase
+          .from('professional_commissions')
+          .select('commission_amount')
+          .eq('user_id', user.id)
+          .gte('paid_at', monthStart.toISOString())
+          .lte('paid_at', monthEnd.toISOString());
 
         // Calculate commissions cost for the month
-        let monthCommissionsCost = 0;
-        monthAppointmentServices?.forEach(service => {
-          const commission = (service as any).professional_services?.commission || 0;
-          const servicePrice = service.price || 0;
-          monthCommissionsCost += (servicePrice * commission) / 100;
-        });
+        const monthCommissionsCost = monthCommissionRows?.reduce((sum, row) => {
+          return sum + Number((row as any).commission_amount || 0);
+        }, 0) || 0;
 
         // Calculate totals for the selected month
         const packagesRevenue = monthPackages?.reduce((sum, pkg) =>
@@ -270,36 +266,30 @@ export default function ReportsPage() {
           serviceCount
         }]);
       } else if (selectedView === 'commissions') {
-        // Load commission data for the selected period
+        // Calculate commission data for the selected period using professional_commissions
         const { data: commissionData } = await supabase
-          .from('appointment_services')
-          .select(`
-            price,
-            appointments!inner(user_id, status, appointment_date),
-            professional_services(
-              commission,
-              professionals(name)
-            )
-          `)
-          .eq('appointments.user_id', user.id)
-          .eq('appointments.status', 'completed')
-          .gte('appointments.appointment_date', startDate.toISOString())
-          .lte('appointments.appointment_date', endDate.toISOString());
+          .from('professional_commissions')
+          .select('commission_amount, paid_at, professionals(name), appointments(appointment_date, customer_name)')
+          .eq('user_id', user.id)
+          .gte('paid_at', startDate.toISOString())
+          .lte('paid_at', endDate.toISOString());
+
+        console.log('Commission view data:', commissionData);
+        console.log('Commission date range:', startDate.toISOString(), 'to', endDate.toISOString());
+        console.log('Total commission records found:', commissionData?.length || 0);
 
         // Process commission data
         const dailyCommissions: { [date: string]: { [professional: string]: number } } = {};
         const monthlyCommissions: { [month: string]: { [professional: string]: number } } = {};
         const professionalTotals: { [professional: string]: number } = {};
 
-        commissionData?.forEach(service => {
-          const appointment = (service as any).appointments;
-          const date = new Date(appointment.appointment_date).toISOString().split('T')[0];
+        commissionData?.forEach(row => {
+          const paidAt = (row as any).paid_at || (row as any).appointments?.appointment_date;
+          const date = new Date(paidAt).toISOString().split('T')[0];
           const month = date.substring(0, 7); // YYYY-MM format
 
-          const commission = (service as any).professional_services?.commission || 0;
-          const servicePrice = service.price || 0;
-          const commissionAmount = (servicePrice * commission) / 100;
-          const professionalName = (service as any).professional_services?.professionals?.name || 'Desconhecido';
+          const commissionAmount = Number((row as any).commission_amount || 0);
+          const professionalName = (row as any).professionals?.name || 'Desconhecido';
 
           // Daily totals
           if (!dailyCommissions[date]) dailyCommissions[date] = {};
@@ -1057,7 +1047,7 @@ export default function ReportsPage() {
                       'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
                     ][selectedMonth]}</p>
                     <p className="text-lg font-bold text-gray-800">
-                      R$ {monthlyData[0]?.totalRevenue.toFixed(0) || '0'}
+                      R$ {monthlyData[0]?.totalRevenue?.toFixed(0) || '0'}
                     </p>
                   </div>
                 </div>
