@@ -348,7 +348,8 @@ export default function CustomersManager() {
         package_id: selectedPackage.id,
         paid: true,
         purchase_date: new Date().toISOString(),
-        expiration_date: expirationDate?.toISOString()
+        expiration_date: expirationDate?.toISOString(),
+        sessions_remaining: selectedPackage.services.reduce((total, service) => total + service.quantity, 0)
       })
       .select()
       .single();

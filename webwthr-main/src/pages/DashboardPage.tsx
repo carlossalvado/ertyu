@@ -156,7 +156,7 @@ export default function DashboardPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-800 mb-2">Dashboard</h1>
+              <h1 className="text-3xl font-bold text-gray-800 mb-2">Kito Dev - Sistema de Agendamentos</h1>
               <p className="text-gray-600">Análise completa dos seus agendamentos</p>
             </div>
           </div>

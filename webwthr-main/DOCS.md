@@ -16,6 +16,15 @@ cp .env.example .env
 npm run dev
 ```
 
+## Frontend
+
+Para executar o frontend em desenvolvimento:
+
+```bash
+npm install
+npm run dev
+```
+
 Endpoints principais:
 - `POST /api/keys` — Recebe JSON { apiKey } e grava a chave criptografada (requer cabeçalho `x-user-id` para demo).
 - `POST /api/test-send` — Tenta enviar uma mensagem de teste usando a chave armazenada.
