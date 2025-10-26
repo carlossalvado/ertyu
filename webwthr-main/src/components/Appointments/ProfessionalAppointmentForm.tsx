@@ -26,9 +26,10 @@ interface SelectedService {
 interface ProfessionalAppointmentFormProps {
   onSuccess: () => void;
   prefillCustomer?: Customer;
+  rescheduleAppointment?: any;
 }
 
-export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer }: ProfessionalAppointmentFormProps) {
+export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer, rescheduleAppointment }: ProfessionalAppointmentFormProps) {
   const { professional } = useProfessionalAuth();
   const [services, setServices] = useState<Service[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -84,21 +85,55 @@ export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer
     }
   }, [prefillCustomer]);
 
+  useEffect(() => {
+    if (rescheduleAppointment) {
+      // Pre-fill form with reschedule data
+      const appointmentDate = new Date(rescheduleAppointment.appointment_date);
+      setFormData({
+        customer_name: rescheduleAppointment.customer_name,
+        customer_phone: rescheduleAppointment.customer_phone,
+        appointment_date: formatDateForDisplay(appointmentDate.toISOString().split('T')[0]),
+        appointment_time: appointmentDate.toTimeString().slice(0, 5),
+        notes: rescheduleAppointment.notes || ''
+      });
+
+      // Find and select the customer
+      const customer = customers.find(c => c.phone === rescheduleAppointment.customer_phone);
+      if (customer) {
+        setSelectedCustomer(customer);
+      }
+
+      // Load services from the appointment
+      if (rescheduleAppointment.services) {
+        const servicesToSelect = rescheduleAppointment.services.map((service: any) => ({
+          service_id: service.service?.id || service.id
+        }));
+        setSelectedServices(servicesToSelect);
+      }
+    }
+  }, [rescheduleAppointment, customers]);
+
   const loadData = async () => {
     if (!professional) return;
 
     try {
-      // Load services for this professional from shared_services
-      const { data: servicesData, error: servicesError } = await supabase
-        .from('shared_services')
-        .select('id, name, price, duration_minutes')
-        .eq('professional_id', professional.id)
-        .eq('active', true)
-        .order('name');
+      // Load services for this professional from professional_services
+      const { data: professionalServices, error: profServicesError } = await supabase
+        .from('professional_services')
+        .select(`
+          service_id,
+          services (
+            id,
+            name,
+            price,
+            duration_minutes
+          )
+        `)
+        .eq('professional_id', professional.id);
 
-      if (servicesError) {
-        console.error('Error loading services:', servicesError);
-        // Fallback to all active services if shared_services fails
+      if (profServicesError) {
+        console.error('Error loading professional services:', profServicesError);
+        // Fallback to all active services if professional_services fails
         const { data: fallbackServices, error: fallbackError } = await supabase
           .from('services')
           .select('id, name, price, duration_minutes')
@@ -108,12 +143,14 @@ export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer
         if (fallbackError) throw fallbackError;
         setServices(fallbackServices || []);
       } else {
-        setServices(servicesData || []);
+        // Extract services from professional_services relationship
+        const servicesData = professionalServices?.map((ps: any) => ps.services).filter(Boolean) || [];
+        setServices(servicesData);
       }
 
-      // Load customers for this professional from shared_customers
+      // Load customers for this professional from customers table
       const { data: customersData, error: customersError } = await supabase
-        .from('shared_customers')
+        .from('customers')
         .select('id, name, phone, professional_id')
         .eq('professional_id', professional.id)
         .order('name');
@@ -181,8 +218,8 @@ export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer
     const appointmentEndTime = new Date(appointmentDateTime);
     appointmentEndTime.setMinutes(appointmentEndTime.getMinutes() + totalDuration);
 
-    // Check for conflicting appointments
-    const { error } = await supabase
+    // Check for conflicting appointments (exclude current appointment if rescheduling)
+    const query = supabase
       .from('appointments')
       .select('id, appointment_date, status, customer_name')
       .eq('professional_id', professional.id)
@@ -190,13 +227,20 @@ export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer
       .lt('appointment_date', appointmentEndTime.toISOString())
       .neq('status', 'cancelled');
 
+    // Exclude current appointment if rescheduling
+    if (rescheduleAppointment) {
+      query.neq('id', rescheduleAppointment.id);
+    }
+
+    const { error } = await query;
+
     if (error) {
       console.error('Error checking time conflicts:', error);
       return { hasConflict: false, conflictingAppointments: [] };
     }
 
     // Also check if any existing appointment overlaps with our time slot
-    const { data: overlappingAppointments, error: overlapError } = await supabase
+    const overlapQuery = supabase
       .from('appointments')
       .select(`
         id,
@@ -210,6 +254,13 @@ export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer
       .eq('professional_id', professional.id)
       .neq('status', 'cancelled')
       .neq('status', 'completed');
+
+    // Exclude current appointment if rescheduling
+    if (rescheduleAppointment) {
+      overlapQuery.neq('id', rescheduleAppointment.id);
+    }
+
+    const { data: overlappingAppointments, error: overlapError } = await overlapQuery;
 
     if (overlapError) {
       console.error('Error checking overlapping appointments:', overlapError);
@@ -286,7 +337,7 @@ export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer
       // Find or create customer
       let customerId = selectedCustomer?.id;
       if (!customerId) {
-        // Create new customer in shared_customers table
+        // Create new customer in customers table (not shared_customers)
         // Get user_id from professionals table
         const { data: profData, error: profError } = await supabase
           .from('professionals')
@@ -297,7 +348,7 @@ export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer
         if (profError) throw profError;
 
         const { data: newCustomer, error: customerError } = await supabase
-          .from('shared_customers')
+          .from('customers')
           .insert({
             name: formData.customer_name,
             phone: formData.customer_phone,
@@ -311,22 +362,65 @@ export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer
         customerId = newCustomer.id;
       }
 
-      // Create appointment
-      const { data: appointment, error: appointmentError } = await supabase
-        .from('appointments')
-        .insert({
-          professional_id: professional.id,
-          customer_name: formData.customer_name,
-          customer_phone: formData.customer_phone,
-          appointment_date: appointmentDateTime.toISOString(),
-          total_price: totalPrice,
-          notes: formData.notes,
-          status: 'pending'
-        })
-        .select()
+      // Get user_id from professionals table
+      const { data: profData, error: profError } = await supabase
+        .from('professionals')
+        .select('user_id')
+        .eq('id', professional.id)
         .single();
 
-      if (appointmentError) throw appointmentError;
+      if (profError) throw profError;
+
+      // Create or update appointment
+      let appointment;
+      if (rescheduleAppointment) {
+        // For rescheduling, delete the old appointment and create a new one
+        // This ensures the old time slot is freed up
+        await supabase
+          .from('appointments')
+          .delete()
+          .eq('id', rescheduleAppointment.id);
+
+        // Create new appointment with updated details
+        const { data: newAppointment, error: createError } = await supabase
+          .from('appointments')
+          .insert({
+            user_id: profData.user_id,
+            professional_id: professional.id,
+            customer_name: formData.customer_name,
+            customer_phone: formData.customer_phone,
+            appointment_date: appointmentDateTime.toISOString(),
+            total_price: totalPrice,
+            notes: formData.notes,
+            status: 'pending'
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        appointment = newAppointment;
+      } else {
+        // Create new appointment
+        const { data: newAppointment, error: createError } = await supabase
+          .from('appointments')
+          .insert({
+            user_id: profData.user_id,
+            professional_id: professional.id,
+            customer_name: formData.customer_name,
+            customer_phone: formData.customer_phone,
+            appointment_date: appointmentDateTime.toISOString(),
+            total_price: totalPrice,
+            notes: formData.notes,
+            status: 'pending'
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        appointment = newAppointment;
+      }
+
+      // Error handling is done in the if/else blocks above
 
       // Create appointment services
       const servicesToInsert = appointmentServices.map(service => ({
@@ -591,7 +685,7 @@ export default function ProfessionalAppointmentForm({ onSuccess, prefillCustomer
             disabled={loading}
             className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Criando Agendamento...' : 'Criar Agendamento'}
+            {loading ? (rescheduleAppointment ? 'Reagendando...' : 'Criando Agendamento...') : (rescheduleAppointment ? 'Reagendar Agendamento' : 'Criar Agendamento')}
           </button>
         </div>
       </form>

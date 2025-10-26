@@ -1,13 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
-
-interface Professional {
-  id: string;
-  name: string;
-  specialty: string;
-  role: string;
-  email: string;
-}
+import { AuthService, AuthState, Professional } from '../lib/auth';
 
 interface ProfessionalAuthContextType {
   professional: Professional | null;
@@ -19,86 +11,43 @@ interface ProfessionalAuthContextType {
 const ProfessionalAuthContext = createContext<ProfessionalAuthContextType | undefined>(undefined);
 
 export function ProfessionalAuthProvider({ children }: { children: ReactNode }) {
-  const [professional, setProfessional] = useState<Professional | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authState, setAuthState] = useState<AuthState>({
+    professional: null,
+    isAuthenticated: false,
+    isLoading: true
+  });
 
   useEffect(() => {
-    // Check if professional is logged in on mount
-    const storedProfessional = localStorage.getItem('professional_auth');
-    if (storedProfessional) {
-      try {
-        setProfessional(JSON.parse(storedProfessional));
-      } catch (error) {
-        console.error('Error parsing stored professional data:', error);
-        localStorage.removeItem('professional_auth');
-      }
-    }
-    setLoading(false);
+    const authService = AuthService.getInstance();
+
+    // Set initial state
+    setAuthState(authService.getAuthState());
+
+    // Subscribe to auth state changes
+    const unsubscribe = authService.subscribe((newState) => {
+      setAuthState(newState);
+    });
+
+    return unsubscribe;
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    try {
-      setLoading(true);
-
-      // Authenticate professional directly with Supabase Auth (same as admin)
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password
-      });
-
-      if (authError) {
-        console.error('Authentication error:', authError);
-        return false;
-      }
-
-      // Get professional data from database
-      const { data: profData, error: profError } = await supabase
-        .from('professionals')
-        .select('*')
-        .eq('email', email)
-        .eq('active', true)
-        .single();
-
-      if (profError || !profData) {
-        console.error('Professional data error:', profError);
-        // Sign out since professional data not found
-        await supabase.auth.signOut();
-        return false;
-      }
-
-      const professionalData: Professional = {
-        id: profData.id,
-        name: profData.name,
-        specialty: profData.specialty || '',
-        role: profData.role || 'professional',
-        email: email
-      };
-
-      setProfessional(professionalData);
-      localStorage.setItem('professional_auth', JSON.stringify(professionalData));
-      return true;
-
-    } catch (error) {
-      console.error('Login error:', error);
-      return false;
-    } finally {
-      setLoading(false);
-    }
+    const authService = AuthService.getInstance();
+    const result = await authService.login(email, password);
+    return result.success;
   };
 
   const logout = () => {
-    setProfessional(null);
-    localStorage.removeItem('professional_auth');
-    // Clear any admin auth session when professional logs out
-    supabase.auth.signOut();
+    const authService = AuthService.getInstance();
+    authService.logout();
   };
 
   return (
     <ProfessionalAuthContext.Provider value={{
-      professional,
+      professional: authState.professional,
       login,
       logout,
-      loading
+      loading: authState.isLoading
     }}>
       {children}
     </ProfessionalAuthContext.Provider>

@@ -82,6 +82,9 @@ export default function TimeSlotPicker({
         query = query.eq('user_id', user.id);
       }
 
+      // For professional users, we don't filter by user_id since they should see all their appointments
+      // The professional_id filter is sufficient
+
       const { data, error } = await query;
 
       if (error) {

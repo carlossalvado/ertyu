@@ -58,8 +58,8 @@ BEGIN
             user_id
         )
         SELECT
-            -- Get professional_id from appointment_services if available, otherwise use appointment's professional
-            COALESCE(aps.professional_id, NEW.professional_id) AS professional_id,
+            -- Use appointment's professional_id since appointment_services doesn't have professional_id
+            NEW.professional_id AS professional_id,
             aps.id AS appointment_service_id,
             NEW.id AS appointment_id,
             aps.price AS service_price,
@@ -70,7 +70,7 @@ BEGIN
         FROM appointment_services aps
         LEFT JOIN professional_services ps
           ON aps.service_id = ps.service_id
-          AND ps.professional_id = COALESCE(aps.professional_id, NEW.professional_id)
+          AND ps.professional_id = NEW.professional_id
         WHERE aps.appointment_id = NEW.id;
     END IF;
 

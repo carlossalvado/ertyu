@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { ApiService, Commission } from '../lib/api';
 import { BarChart3, TrendingUp, DollarSign, Package, Scissors } from 'lucide-react';
 
 type ReportPeriod = 'year' | 'semester' | 'quarter' | 'month' | 'last_month';
-type ReportView = 'overview' | 'daily' | 'monthly' | 'commissions';
+type ReportView = 'overview' | 'daily' | 'monthly' | 'admin-commissions';
 
 interface ReportData {
   packagesRevenue: number;
@@ -32,9 +33,14 @@ export default function ReportsPage() {
     packageCount: 0,
     serviceCount: 0
   });
+  const [commission, setCommission] = useState<Commission | null>(null);
   const [dailyData, setDailyData] = useState<any[]>([]);
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [commissionLoading, setCommissionLoading] = useState(false);
+  const [commissionError, setCommissionError] = useState('');
+
+  const apiService = ApiService.getInstance();
 
   // Generate year options (current year + last 5 years)
   const yearOptions = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i);
@@ -42,6 +48,20 @@ export default function ReportsPage() {
   useEffect(() => {
     loadReportData();
   }, [user, selectedYear, selectedMonth, selectedDay, selectedPeriod, selectedView]);
+
+  const loadCommissions = async () => {
+    try {
+      setCommissionLoading(true);
+      const data = await apiService.getCommissions();
+      setCommission(data);
+      setCommissionError('');
+    } catch (err) {
+      setCommissionError('Erro ao carregar dados de comissão');
+      console.error(err);
+    } finally {
+      setCommissionLoading(false);
+    }
+  };
 
   const getDateRange = () => {
     const year = selectedYear;
@@ -94,6 +114,12 @@ export default function ReportsPage() {
     const { startDate, endDate } = getDateRange();
 
     try {
+      if (selectedView === 'commissions') {
+        // Load commission data using agpr logic
+        await loadCommissions();
+        return;
+      }
+
       if (selectedView === 'overview') {
         // Get packages revenue
         const { data: packagesData } = await supabase
@@ -315,6 +341,103 @@ export default function ReportsPage() {
           commissions: professionals,
           totalCommissions: Object.values(professionals).reduce((sum, amount) => sum + amount, 0)
         })));
+      } else if (selectedView === 'admin-commissions') {
+        // Calculate commission data for admin view - includes all professionals
+        const { data: commissionData } = await supabase
+          .from('professional_commissions')
+          .select(`
+            commission_amount,
+            paid_at,
+            professionals(name),
+            appointment_services(
+              services(name, price)
+            ),
+            appointments(appointment_date, customer_name)
+          `)
+          .eq('user_id', user.id)
+          .gte('paid_at', startDate.toISOString())
+          .lte('paid_at', endDate.toISOString())
+          .order('paid_at', { ascending: false });
+
+        console.log('Admin Commission view data:', commissionData);
+
+        // Process commission data with service details for admin view
+        const dailyCommissions: { [date: string]: { services: any[], total: number } } = {};
+        const monthlyCommissions: { [month: string]: { professionals: any[], total: number } } = {};
+
+        commissionData?.forEach(row => {
+          const paidAt = (row as any).paid_at || (row as any).appointments?.appointment_date;
+          if (!paidAt) return;
+
+          const date = new Date(paidAt).toISOString().split('T')[0];
+          const month = date.substring(0, 7); // YYYY-MM format
+
+          const commissionAmount = Number((row as any).commission_amount || 0);
+          const service = (row as any).appointment_services?.services;
+          const appointment = (row as any).appointments;
+          const professional = (row as any).professionals;
+
+          const serviceData = {
+            name: service?.name || 'Serviço não encontrado',
+            price: service?.price || 0,
+            commission: commissionAmount,
+            date: date,
+            customer: appointment?.customer_name || 'Cliente não informado',
+            professional: professional?.name || 'Profissional não informado'
+          };
+
+          // Daily totals
+          if (!dailyCommissions[date]) {
+            dailyCommissions[date] = { services: [], total: 0 };
+          }
+          dailyCommissions[date].services.push(serviceData);
+          dailyCommissions[date].total += commissionAmount;
+
+          // Monthly totals - group by professional per day within the month
+          if (!monthlyCommissions[month]) {
+            monthlyCommissions[month] = { professionals: [], total: 0 };
+          }
+
+          // Check if professional already exists for this specific date
+          const existingProf = monthlyCommissions[month].professionals.find(
+            (p: any) => p.professional === serviceData.professional && p.date === date
+          );
+
+          if (existingProf) {
+            existingProf.commission += commissionAmount;
+          } else {
+            monthlyCommissions[month].professionals.push({
+              professional: serviceData.professional,
+              commission: commissionAmount,
+              date: date
+            });
+          }
+
+          monthlyCommissions[month].total += commissionAmount;
+        });
+
+        // Convert to arrays for display
+        setDailyData(Object.entries(dailyCommissions)
+          .map(([date, data]) => ({
+            date,
+            services: data.services,
+            totalCommissions: data.total
+          }))
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        );
+
+        setMonthlyData(Object.entries(monthlyCommissions)
+          .map(([month, data]) => ({
+            month: parseInt(month.split('-')[1]) - 1, // Convert to month index
+            year: parseInt(month.split('-')[0]),
+            professionals: data.professionals,
+            totalCommissions: data.total
+          }))
+          .sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year;
+            return b.month - a.month;
+          })
+        );
       }
     } catch (error) {
       console.error('Error loading report data:', error);
@@ -407,9 +530,9 @@ export default function ReportsPage() {
             Por Mês
           </button>
           <button
-            onClick={() => setSelectedView('commissions')}
+            onClick={() => setSelectedView('admin-commissions')}
             className={`px-6 py-2 rounded-lg text-sm font-medium transition ${
-              selectedView === 'commissions'
+              selectedView === 'admin-commissions'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
@@ -460,100 +583,282 @@ export default function ReportsPage() {
 
       {selectedView === 'commissions' && (
         <>
-          {/* Commission Summary */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-            <h2 className="text-xl font-semibold text-gray-800 mb-6">Resumo de Comissões - {getPeriodLabel()}</h2>
+          {/* Commission Summary using agpr logic */}
+          <div className="space-y-6">
+            <div className="card p-6">
+              <div className="text-center mb-6">
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+                  Relatório de Comissões
+                </h3>
+                <p className="text-slate-600 dark:text-slate-400">
+                  Acompanhe sua performance e ganhos
+                </p>
+              </div>
 
-            {/* Daily Commissions Table */}
-            <div className="mb-8">
-              <h3 className="text-lg font-medium text-gray-700 mb-4">Comissões por Dia</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Data
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Profissional
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Comissão
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {dailyData.length > 0 ? dailyData.map((day: any) =>
-                      Object.entries(day.commissions || {}).map(([professional, amount]) => (
-                        <tr key={`${day.date}-${professional}`}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(day.date).toLocaleDateString('pt-BR')}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {professional}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            R$ {Number(amount).toFixed(2)}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500">
-                          Nenhuma comissão encontrada para o período
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              {commissionLoading ? (
+                <div className="flex justify-center items-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : commissionError ? (
+                <div className="text-center py-8">
+                  <p className="text-red-600">{commissionError}</p>
+                  <button
+                    onClick={loadCommissions}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              ) : commission ? (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="card metric-card text-center">
+                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/50 rounded-lg flex items-center justify-center mx-auto mb-4">
+                        <span className="text-blue-600 dark:text-blue-400 text-xl">📊</span>
+                      </div>
+                      <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                        Total de Atendimentos
+                      </h3>
+                      <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        {commission.total_appointments}
+                      </p>
+                    </div>
+
+                    <div className="card metric-card text-center">
+                      <div className="w-12 h-12 bg-green-100 dark:bg-green-900/50 rounded-lg flex items-center justify-center mx-auto mb-4">
+                        <span className="text-green-600 dark:text-green-400 text-xl">💰</span>
+                      </div>
+                      <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                        Receita Total
+                      </h3>
+                      <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        R$ {commission.total_revenue.toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div className="card metric-card text-center">
+                      <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/50 rounded-lg flex items-center justify-center mx-auto mb-4">
+                        <span className="text-purple-600 dark:text-purple-400 text-xl">📈</span>
+                      </div>
+                      <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                        Taxa de Comissão
+                      </h3>
+                      <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        {(commission.commission_rate * 100).toFixed(1)}%
+                      </p>
+                    </div>
+
+                    <div className="card metric-card text-center">
+                      <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg flex items-center justify-center mx-auto mb-4">
+                        <span className="text-yellow-600 dark:text-yellow-400 text-xl">💎</span>
+                      </div>
+                      <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                        Comissão Total
+                      </h3>
+                      <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        R$ {commission.commission_amount.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 card p-6">
+                    <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 text-center">
+                      Detalhes do Cálculo
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="text-center p-4">
+                        <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/50 rounded-lg flex items-center justify-center mx-auto mb-3">
+                          <span className="text-blue-600 dark:text-blue-400 text-sm">✅</span>
+                        </div>
+                        <h5 className="font-medium text-slate-900 dark:text-slate-100 mb-2">Status Considerado</h5>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          Apenas agendamentos com status "Concluído" são considerados no cálculo
+                        </p>
+                      </div>
+                      <div className="text-center p-4">
+                        <div className="w-8 h-8 bg-green-100 dark:bg-green-900/50 rounded-lg flex items-center justify-center mx-auto mb-3">
+                          <span className="text-green-600 dark:text-green-400 text-sm">💰</span>
+                        </div>
+                        <h5 className="font-medium text-slate-900 dark:text-slate-100 mb-2">Base de Cálculo</h5>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          Comissão calculada sobre o valor total dos serviços realizados
+                        </p>
+                      </div>
+                      <div className="text-center p-4">
+                        <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/50 rounded-lg flex items-center justify-center mx-auto mb-3">
+                          <span className="text-purple-600 dark:text-purple-400 text-sm">📊</span>
+                        </div>
+                        <h5 className="font-medium text-slate-900 dark:text-slate-100 mb-2">Taxa Atual</h5>
+                        <p className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                          {(commission.commission_rate * 100).toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Nenhum dado de comissão disponível</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {selectedView === 'admin-commissions' && (
+        <>
+          {/* Admin Commission Reports - Similar to ProfessionalCommissions but for admin view */}
+          <div className="space-y-6">
+            {/* Year Selector */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Comissões por Ano</h3>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {yearOptions.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            {/* Monthly Commissions Table */}
-            <div className="mb-8">
-              <h3 className="text-lg font-medium text-gray-700 mb-4">Comissões por Mês</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Mês
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Profissional
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Comissão
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {monthlyData.length > 0 ? monthlyData.map((month: any) =>
-                      Object.entries(month.commissions || {}).map(([professional, amount]) => (
-                        <tr key={`${month.month}-${professional}`}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {[
-                              'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-                              'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-                            ][month.month]} {month.year}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {professional}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            R$ {Number(amount).toFixed(2)}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500">
-                          Nenhuma comissão encontrada para o período
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+            {/* Commission Summary */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-6">Resumo de Comissões - {selectedYear}</h2>
+
+              {/* Daily Commissions Table */}
+              <div className="mb-8">
+                <h3 className="text-lg font-medium text-gray-700 mb-4">Comissões por Dia</h3>
+                <div className="space-y-4">
+                  {dailyData.length > 0 ? dailyData.map((day: any) => (
+                    <div key={day.date} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
+                        <h4 className="text-lg font-medium text-gray-900">
+                          {new Date(day.date).toLocaleDateString('pt-BR')}
+                        </h4>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Profissional
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Serviço
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Cliente
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Valor da Comissão
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {day.services?.map((service: any, index: number) => (
+                              <tr key={`${day.date}-${index}`}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {service.professional}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {service.name}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {service.customer}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  R$ {Number(service.commission).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                            {/* Total row */}
+                            <tr className="bg-gray-50">
+                              <td colSpan={3} className="px-6 py-4 text-right text-sm font-medium text-gray-900">
+                                Total do dia:
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                                R$ {day.totalCommissions.toFixed(2)}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
+                      <p className="text-gray-500">Nenhuma comissão encontrada para o período</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Monthly Commissions Table */}
+              <div className="mb-8">
+                <h3 className="text-lg font-medium text-gray-700 mb-4">Comissões por Mês</h3>
+                <div className="space-y-4">
+                  {monthlyData.length > 0 ? monthlyData.map((month: any) => (
+                    <div key={`${month.month}-${month.year}`} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
+                        <h4 className="text-lg font-medium text-gray-900">
+                          {[
+                            'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+                          ][month.month]} {month.year}
+                        </h4>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Data
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Profissional
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Total da Comissão
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {month.professionals?.map((prof: any, index: number) => (
+                              <tr key={`${month.month}-${month.year}-${index}`}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {new Date(prof.date).toLocaleDateString('pt-BR')}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {prof.professional}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  R$ {Number(prof.commission).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                            {/* Total row */}
+                            <tr className="bg-gray-50">
+                              <td colSpan={2} className="px-6 py-4 text-right text-sm font-medium text-gray-900">
+                                Total do mês:
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                                R$ {month.totalCommissions.toFixed(2)}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
+                      <p className="text-gray-500">Nenhuma comissão encontrada para o período</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -883,7 +1188,7 @@ export default function ReportsPage() {
             })}</h2>
 
             {dailyData[0] ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                 <div className="bg-blue-50 rounded-lg p-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -917,7 +1222,7 @@ export default function ReportsPage() {
                 <div className="bg-green-50 rounded-lg p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-600 mb-1">Receita Total</p>
+                      <p className="text-sm text-gray-600 mb-1">Receita Bruta</p>
                       <p className="text-2xl font-bold text-gray-800">R$ {dailyData[0].totalRevenue.toFixed(2)}</p>
                     </div>
                     <div className="bg-green-100 p-3 rounded-xl">
@@ -926,6 +1231,36 @@ export default function ReportsPage() {
                   </div>
                   <p className="text-sm text-gray-600 mt-2">
                     Pacotes + Serviços
+                  </p>
+                </div>
+
+                <div className="bg-red-50 rounded-lg p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Comissões Pagas</p>
+                      <p className="text-2xl font-bold text-red-600">R$ {dailyData[0].commissionsCost.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-red-100 p-3 rounded-xl">
+                      <TrendingUp className="w-6 h-6 text-red-600" />
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Custos de Comissão
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 rounded-lg p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Receita Líquida</p>
+                      <p className="text-2xl font-bold text-blue-600">R$ {dailyData[0].netRevenue.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-blue-100 p-3 rounded-xl">
+                      <BarChart3 className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Receita Bruta - Comissões
                   </p>
                 </div>
               </div>
@@ -1106,7 +1441,7 @@ export default function ReportsPage() {
             ][selectedMonth]} {selectedYear}</h2>
 
             {monthlyData[0] ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                 <div className="bg-blue-50 rounded-lg p-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1140,7 +1475,7 @@ export default function ReportsPage() {
                 <div className="bg-green-50 rounded-lg p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-600 mb-1">Receita Total</p>
+                      <p className="text-sm text-gray-600 mb-1">Receita Bruta</p>
                       <p className="text-2xl font-bold text-gray-800">R$ {monthlyData[0].totalRevenue.toFixed(2)}</p>
                     </div>
                     <div className="bg-green-100 p-3 rounded-xl">
@@ -1149,6 +1484,36 @@ export default function ReportsPage() {
                   </div>
                   <p className="text-sm text-gray-600 mt-2">
                     Pacotes + Serviços
+                  </p>
+                </div>
+
+                <div className="bg-red-50 rounded-lg p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Comissões Pagas</p>
+                      <p className="text-2xl font-bold text-red-600">R$ {monthlyData[0].commissionsCost.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-red-100 p-3 rounded-xl">
+                      <TrendingUp className="w-6 h-6 text-red-600" />
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Custos de Comissão
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 rounded-lg p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Receita Líquida</p>
+                      <p className="text-2xl font-bold text-blue-600">R$ {monthlyData[0].netRevenue.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-blue-100 p-3 rounded-xl">
+                      <BarChart3 className="w-6 h-6 text-blue-600" />
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Receita Bruta - Comissões
                   </p>
                 </div>
               </div>

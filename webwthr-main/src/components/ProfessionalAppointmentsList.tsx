@@ -1,35 +1,33 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
-import { useProfessionalAuth } from '../../contexts/ProfessionalAuthContext';
-import { Calendar, Clock, User, Phone, Scissors, DollarSign, Trash2, CheckCircle, XCircle, AlertCircle, RotateCcw, Search, CheckSquare, Square, Trash } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Calendar, Clock, User, Phone, Scissors, DollarSign, CheckCircle, XCircle, AlertCircle, Search, CheckSquare, Square } from 'lucide-react';
 
 interface Appointment {
-  id: string;
-  customer_name: string;
-  customer_phone: string;
-  appointment_date: string;
-  status: string;
-  total_price: number;
-  notes: string;
-  professional_name?: string;
+  id: string
+  user_id?: string
+  professional_id: string
+  customer_name: string
+  customer_phone: string
+  appointment_date: string
+  status: string
+  notes?: string
+  total_price: number
+  created_at?: string
+  updated_at?: string
   services?: Array<{
-    service: {
-      name: string;
-    };
-    price: number;
-    used_package_session: boolean;
-  }>;
+    id: string
+    name: string
+    price: number
+    duration_minutes: number
+    used_package_session: boolean
+  }>
 }
 
-interface AppointmentsListProps {
-  refreshTrigger: number;
-  onReschedule?: (appointment: Appointment) => void;
+interface ProfessionalAppointmentsListProps {
+  onEditAppointment: (appointment: Appointment) => void;
 }
 
-export default function AppointmentsList({ refreshTrigger, onReschedule }: AppointmentsListProps) {
-  const { user } = useAuth();
-  const { professional } = useProfessionalAuth();
+export default function ProfessionalAppointmentsList({ onEditAppointment }: ProfessionalAppointmentsListProps) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'>('all');
@@ -38,61 +36,35 @@ export default function AppointmentsList({ refreshTrigger, onReschedule }: Appoi
 
   useEffect(() => {
     loadAppointments();
-  }, [user, professional, refreshTrigger]);
+  }, []);
 
   const loadAppointments = async () => {
-    if (!user && !professional) return;
-
     setLoading(true);
     try {
-      let data;
+      // Use the same logic as the admin AppointmentsList but filtered by professional
+      const { data: appointmentsData, error } = await supabase
+        .from('appointments')
+        .select(`
+          *,
+          professionals(name),
+          services:appointment_services(
+            service:services(name),
+            price,
+            used_package_session
+          )
+        `)
+        .order('appointment_date', { ascending: false });
 
-      if (professional) {
-        // Professionals use ApiService from agpr logic
-        const { ApiService } = await import('../../lib/api');
-        const apiService = ApiService.getInstance();
-        const appointmentsData = await apiService.getAppointments();
+      if (error) throw error;
 
-        // Format data to match appointment interface
-        data = appointmentsData?.map(item => ({
-          id: item.id,
-          customer_name: item.customer_name,
-          customer_phone: item.customer_phone,
-          appointment_date: item.appointment_date,
-          status: item.status,
-          total_price: item.total_price,
-          notes: item.notes || '',
-          professional_name: professional?.name || 'Profissional',
-          services: item.services?.map(s => ({
-            service: { name: s.name },
-            price: s.price,
-            used_package_session: s.used_package_session
-          })) || []
-        })) || [];
-      } else {
-        // Admins use regular appointments table
-        const { data: appointmentsData, error } = await supabase
-          .from('appointments')
-          .select(`
-            *,
-            professionals(name),
-            services:appointment_services(
-              service:services(name),
-              price,
-              used_package_session
-            )
-          `)
-          .eq('user_id', user!.id)
-          .order('appointment_date', { ascending: false });
+      const data = appointmentsData?.map(apt => ({
+        ...apt,
+        professional_name: (apt.professionals as any)?.name || 'Profissional',
+        services: (apt.services as any) || []
+      })) || [];
 
-        if (error) throw error;
-
-        data = appointmentsData?.map(apt => ({
-          ...apt,
-          professional_name: (apt.professionals as any)?.name || 'Profissional',
-          services: (apt.services as any) || []
-        })) || [];
-      }
+      console.log('ProfessionalAppointmentsList - Loaded appointments:', data.length);
+      console.log('Sample appointment:', data[0]);
 
       setAppointments(data);
     } catch (error) {
@@ -103,6 +75,7 @@ export default function AppointmentsList({ refreshTrigger, onReschedule }: Appoi
   };
 
   const updateStatus = async (id: string, newStatus: string) => {
+    console.log(`Updating appointment ${id} to status: ${newStatus}`);
     try {
       const { error } = await supabase
         .from('appointments')
@@ -111,45 +84,16 @@ export default function AppointmentsList({ refreshTrigger, onReschedule }: Appoi
         })
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      console.log(`Successfully updated appointment ${id} to ${newStatus}`);
       loadAppointments();
     } catch (error) {
       console.error('Error updating appointment:', error);
-    }
-  };
-
-  const deleteAppointment = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este agendamento?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('appointments')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      loadAppointments();
-    } catch (error) {
-      console.error('Error deleting appointment:', error);
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedAppointments.size === 0) return;
-    if (!confirm(`Tem certeza que deseja excluir ${selectedAppointments.size} agendamento(s)?`)) return;
-
-    try {
-      const { error } = await supabase
-        .from('appointments')
-        .delete()
-        .in('id', Array.from(selectedAppointments));
-
-      if (error) throw error;
-      setSelectedAppointments(new Set());
-      loadAppointments();
-    } catch (error) {
-      console.error('Error bulk deleting appointments:', error);
-      alert('Erro ao excluir agendamentos. Tente novamente.');
+      alert('Erro ao atualizar agendamento. Tente novamente.');
     }
   };
 
@@ -250,13 +194,9 @@ export default function AppointmentsList({ refreshTrigger, onReschedule }: Appoi
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-semibold text-gray-900">Agendamentos</h3>
             {selectedAppointments.size > 0 && (
-              <button
-                onClick={handleBulkDelete}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition"
-              >
-                <Trash className="w-4 h-4" />
-                Excluir Selecionados ({selectedAppointments.size})
-              </button>
+              <span className="text-sm text-gray-600">
+                {selectedAppointments.size} selecionado{selectedAppointments.size !== 1 ? 's' : ''}
+              </span>
             )}
           </div>
           <button
@@ -369,14 +309,10 @@ export default function AppointmentsList({ refreshTrigger, onReschedule }: Appoi
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm text-gray-700">{appointment.professional_name}</span>
-                </div>
-                <div className="flex items-center gap-2">
                   <Scissors className="w-4 h-4 text-gray-500" />
                   <span className="text-sm text-gray-700">
                     {appointment.services?.length === 1
-                      ? appointment.services[0]?.service?.name || 'Serviço'
+                      ? appointment.services[0]?.name || 'Serviço'
                       : `${appointment.services?.length || 0} serviços`
                     }
                   </span>
@@ -384,6 +320,41 @@ export default function AppointmentsList({ refreshTrigger, onReschedule }: Appoi
                 <div className="flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-gray-500" />
                   <span className="text-sm font-semibold text-blue-600">R$ {appointment.total_price.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {appointment.status === 'pending' && (
+                    <>
+                      <button
+                        onClick={() => updateStatus(appointment.id, 'confirmed')}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
+                        title="Confirmar"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => updateStatus(appointment.id, 'cancelled')}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                        title="Cancelar"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                  {appointment.status === 'confirmed' && (
+                    <button
+                      onClick={() => updateStatus(appointment.id, 'completed')}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                      title="Marcar como concluído"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onEditAppointment(appointment)}
+                    className="btn-secondary text-sm px-4 py-2"
+                  >
+                    Editar
+                  </button>
                 </div>
               </div>
 
@@ -406,63 +377,6 @@ export default function AppointmentsList({ refreshTrigger, onReschedule }: Appoi
                       timeZone: 'America/Sao_Paulo'
                     })}
                   </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {appointment.status === 'pending' && (
-                    <>
-                      <button
-                        onClick={() => updateStatus(appointment.id, 'confirmed')}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-                        title="Confirmar"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => updateStatus(appointment.id, 'cancelled')}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                        title="Cancelar"
-                      >
-                        <XCircle className="w-4 h-4" />
-                      </button>
-                      {onReschedule && (
-                        <button
-                          onClick={() => onReschedule(appointment)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                          title="Reagendar"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                        </button>
-                      )}
-                    </>
-                  )}
-                  {appointment.status === 'confirmed' && (
-                    <>
-                      <button
-                        onClick={() => updateStatus(appointment.id, 'completed')}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                        title="Marcar como concluído"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                      </button>
-                      {onReschedule && (
-                        <button
-                          onClick={() => onReschedule(appointment)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                          title="Reagendar"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                        </button>
-                      )}
-                    </>
-                  )}
-                  <button
-                    onClick={() => deleteAppointment(appointment.id)}
-                    className="p-2 text-gray-400 hover:text-red-600 transition"
-                    title="Excluir"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
 
